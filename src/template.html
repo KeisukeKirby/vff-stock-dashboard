@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VFF 在庫・発注ダッシュボード</title>
+<style>
+:root{
+  --bg:#0F1B14; --panel:#16241C; --panel-2:#1C2E23; --line:#2A3E31;
+  --ink:#EDF3EC; --ink-dim:#AFC4B6; --ink-faint:#7E9587;
+  --accent:#E8A33D;
+  /* chart series (validated on #16241C, dark): 2026=yellow 2025=blue export=magenta projection=violet */
+  --s-2026:#c98500; --s-2025:#3987e5; --s-export:#d55181; --s-proj:#9085e9;
+  /* status colours - always paired with a text label */
+  --st-out:#e66767; --st-order:#ec835a; --st-watch:#fab219; --st-ok:#199e70;
+  --st-excess:#3987e5; --st-idle:#898781; --st-incoming:#9085e9; --st-sizegap:#d55181;
+  --sans:"Noto Sans JP",-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Meiryo","Yu Gothic",sans-serif;
+  --mono:"JetBrains Mono","SFMono-Regular",Consolas,"Roboto Mono",monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{margin:0;background:radial-gradient(1200px 500px at 10% -10%, rgba(232,163,61,.07), transparent),var(--bg);
+  color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;padding:28px 16px 60px;}
+.wrap{max-width:1180px;margin:0 auto;}
+header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;padding-bottom:16px;}
+.eyebrow{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.12em;color:var(--accent);text-transform:uppercase;margin-bottom:6px;}
+h1{margin:0;font-size:26px;font-weight:700;}
+.period{font-family:var(--mono);color:var(--ink-dim);font-size:12.5px;line-height:1.7;}
+.period b{color:var(--ink);font-weight:600;}
+a{color:var(--accent);}
+
+/* assumptions bar */
+.assump{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:14px 0 22px;}
+.assump .lbl{font-size:12px;color:var(--ink-dim);margin-right:6px;white-space:nowrap;}
+.assump label.chk{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;}
+.seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:3px;}
+.seg button{background:transparent;border:none;color:var(--ink-dim);font-family:var(--sans);font-size:12.5px;padding:5px 11px;border-radius:6px;cursor:pointer;white-space:nowrap;}
+.seg button.active{background:var(--accent);color:#16241C;font-weight:700;}
+select,input[type=text]{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-family:var(--sans);font-size:13px;}
+input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;}
+.btn{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-family:var(--sans);font-size:13px;cursor:pointer;}
+.btn:hover{border-color:var(--ink-faint);}
+.btn.primary{background:var(--accent);color:#16241C;border-color:var(--accent);font-weight:700;}
+
+nav.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:24px;overflow-x:auto;}
+nav.tabs button{background:none;border:none;padding:11px 16px;font-size:13.5px;font-family:var(--sans);font-weight:600;color:var(--ink-dim);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
+nav.tabs button.active{color:var(--accent);border-bottom-color:var(--accent);}
+nav.tabs button:hover{color:var(--ink);}
+.tabpanel{display:none;} .tabpanel.active{display:block;}
+
+.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:26px;}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;position:relative;overflow:hidden;min-height:104px;}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);}
+.kpi.alert::before{background:var(--st-order);} .kpi.info::before{background:var(--st-incoming);}
+.kpi-label{font-size:12px;color:var(--ink-dim);margin-bottom:8px;}
+.kpi-value{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1;}
+.kpi-value small{font-size:14px;font-weight:500;color:var(--ink-dim);margin-left:3px;}
+.kpi-sub{font-size:12px;color:var(--ink-dim);margin-top:8px;}
+
+section.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:20px;}
+.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.card h2{margin:0;font-size:16px;font-weight:700;}
+.card h2 .num{font-family:var(--mono);color:var(--accent);font-size:12px;margin-right:8px;letter-spacing:.06em;}
+.card .desc{font-size:12.5px;color:var(--ink-dim);margin-top:4px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.note{font-size:12px;color:var(--ink-faint);margin-top:10px;line-height:1.6;}
+
+/* legends & badges */
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--ink-dim);margin-top:10px;}
+.legend .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid transparent;white-space:nowrap;line-height:1.5;}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.st-out{color:var(--st-out);border-color:var(--st-out);background:rgba(230,103,103,.12);}
+.st-order{color:var(--st-order);border-color:var(--st-order);background:rgba(236,131,90,.12);}
+.st-sizegap{color:var(--st-sizegap);border-color:var(--st-sizegap);background:rgba(213,81,129,.12);}
+.st-watch{color:var(--st-watch);border-color:var(--st-watch);background:rgba(250,178,25,.10);}
+.st-ok{color:var(--st-ok);border-color:var(--st-ok);background:rgba(25,158,112,.10);}
+.st-excess{color:var(--st-excess);border-color:var(--st-excess);background:rgba(57,135,229,.10);}
+.st-idle{color:var(--st-idle);border-color:var(--st-idle);background:rgba(137,135,129,.12);}
+.st-incoming{color:var(--st-incoming);border-color:var(--st-incoming);background:rgba(144,133,233,.12);}
+.st-none{color:var(--ink-faint);border-color:var(--line);}
+.gender{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.06em;padding:1px 6px;border-radius:4px;background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--line);}
+
+/* item cards with size runs */
+.items{display:flex;flex-direction:column;gap:10px;}
+.item{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+.item-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:10px;}
+.item-name{font-weight:700;font-size:15px;}
+.item-meta{font-size:12.5px;color:var(--ink-dim);display:flex;gap:14px;flex-wrap:wrap;}
+.item-meta b{color:var(--ink);font-weight:600;}
+.sizes{display:flex;gap:4px;overflow-x:auto;padding-bottom:2px;}
+.sz{min-width:58px;flex:0 0 auto;border-radius:7px;padding:6px 6px 5px;text-align:center;border:1px solid var(--line);background:var(--panel);position:relative;}
+.sz .s{font-family:var(--mono);font-size:11px;color:var(--ink-dim);}
+.sz .q{font-size:17px;font-weight:700;line-height:1.2;margin-top:2px;}
+.sz .c{font-size:10.5px;color:var(--ink-dim);margin-top:1px;white-space:nowrap;}
+.sz .o{position:absolute;top:3px;right:5px;font-size:9.5px;font-family:var(--mono);color:var(--st-incoming);}
+.sz.st-out{background:rgba(230,103,103,.22);border-color:var(--st-out);}
+.sz.st-order{background:rgba(236,131,90,.22);border-color:var(--st-order);}
+.sz.st-watch{background:rgba(250,178,25,.16);border-color:rgba(250,178,25,.7);}
+.sz.st-ok{background:rgba(25,158,112,.12);border-color:rgba(25,158,112,.55);}
+.sz.st-excess{background:rgba(57,135,229,.12);border-color:rgba(57,135,229,.55);}
+.sz.st-idle{background:rgba(137,135,129,.12);border-color:rgba(137,135,129,.5);}
+.sz.st-incoming{background:transparent;border:1px dashed var(--st-incoming);}
+.sz.st-none{opacity:.45;}
+.sz .q,.sz .s,.sz .c{color:var(--ink);} .sz .s,.sz .c{color:var(--ink-dim);}
+
+/* filters */
+.filters{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:14px;}
+.chips{display:flex;flex-wrap:wrap;gap:6px;}
+.chip{background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12.5px;color:var(--ink-dim);cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+.chip .dot{width:8px;height:8px;border-radius:50%;}
+.chip.active{color:var(--ink);border-color:var(--ink-faint);background:var(--panel);}
+.chip.active.st-out{border-color:var(--st-out);} .chip.active.st-order{border-color:var(--st-order);} .chip.active.st-sizegap{border-color:var(--st-sizegap);}
+.chip.active.st-watch{border-color:var(--st-watch);} .chip.active.st-ok{border-color:var(--st-ok);} .chip.active.st-excess{border-color:var(--st-excess);}
+.chip.active.st-idle{border-color:var(--st-idle);} .chip.active.st-incoming{border-color:var(--st-incoming);}
+.chip .n{font-family:var(--mono);font-size:11px;}
+
+/* tables */
+table.tbl{width:100%;border-collapse:collapse;font-size:13px;}
+.tbl th,.tbl td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}
+.tbl th{color:var(--ink-dim);font-weight:600;font-size:12px;position:sticky;top:0;background:var(--panel);cursor:pointer;user-select:none;}
+.tbl th.l,.tbl td.l{text-align:left;}
+.tbl td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+.tbl tr:hover td{background:rgba(255,255,255,.03);}
+.tbl-wrap{overflow:auto;max-height:640px;border:1px solid var(--line);border-radius:8px;}
+.heat td{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;text-align:center;padding:6px 6px;}
+.heat th{text-align:center;}
+.heat td.zero{background:rgba(230,103,103,.28);color:#fff;font-weight:700;}
+.heat td.low{background:rgba(236,131,90,.18);}
+.heat td.arr{box-shadow:inset 0 0 0 1px var(--st-incoming);}
+.heat td.l,.heat th.l{text-align:left;font-family:var(--sans);}
+
+/* svg chart chrome */
+.chart svg{display:block;width:100%;height:auto;}
+.chart text{font-family:var(--sans);font-size:12px;fill:var(--ink-dim);}
+.chart .grid{stroke:var(--line);stroke-width:1;}
+.chart .axis{stroke:#3A5244;stroke-width:1;}
+.chart .thr{stroke:var(--ink-faint);stroke-width:1;stroke-dasharray:4 4;}
+.chart .thr-label{fill:var(--ink-faint);font-size:11px;}
+.chart .val{fill:var(--ink);font-size:12px;}
+.chart .hit{fill:transparent;cursor:crosshair;}
+.chart .dl{font-size:11.5px;fill:var(--ink);font-weight:600;}
+#tip{position:fixed;pointer-events:none;background:#0B1510;border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:12.5px;line-height:1.5;color:var(--ink);z-index:50;display:none;max-width:320px;box-shadow:0 6px 20px rgba(0,0,0,.4);}
+#tip b{color:var(--accent);}
+.toggle-link{background:none;border:none;color:var(--accent);font-size:12.5px;cursor:pointer;padding:0;font-family:var(--sans);}
+.hidden{display:none !important;}
+.empty{color:var(--ink-faint);font-size:13px;padding:14px 0;}
+.about p,.about li{font-size:13.5px;color:var(--ink-dim);}
+.about h3{font-size:14px;margin:18px 0 6px;color:var(--ink);}
+.about code{font-family:var(--mono);font-size:12px;background:var(--panel-2);padding:1px 5px;border-radius:4px;}
+.muted{color:var(--ink-faint);}
+
+@media (max-width:900px){ .kpi-row{grid-template-columns:repeat(2,1fr);} .grid2{grid-template-columns:1fr;} }
+@media (max-width:600px){ body{padding:18px 12px 40px;} h1{font-size:21px;} .kpi-value{font-size:28px;} .kpi-row{grid-template-columns:1fr 1fr;gap:8px;} section.card{padding:14px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <div class="eyebrow">Barefoot Inc · Vibram FiveFingers</div>
+    <h1>VFF 在庫・発注ダッシュボード</h1>
+  </div>
+  <div class="period" id="periodLine"></div>
+</header>
+
+<div class="assump" id="assump">
+  <div><span class="lbl">販売ペースの基準</span>
+    <span class="seg" id="basisSeg">
+      <button data-v="3m">直近3ヶ月(6〜8月)</button>
+      <button data-v="6m">直近6ヶ月(3〜8月)</button>
+      <button data-v="ytd">2026年1〜8月</button>
+    </span>
+  </div>
+  <label class="chk"><input type="checkbox" id="exportChk" checked> 6月の輸出<span id="exportQty"></span>足を除いて国内ペースを算出</label>
+  <div><span class="lbl">発注リードタイム</span>
+    <select id="leadSel"><option value="1">1ヶ月</option><option value="2">2ヶ月</option><option value="3" selected>3ヶ月</option><option value="4">4ヶ月</option><option value="5">5ヶ月</option><option value="6">6ヶ月</option></select>
+  </div>
+  <div><span class="lbl">入荷予定<span id="onOrderQty"></span>足の到着月</span>
+    <select id="arrivalSel"></select>
+  </div>
+</div>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="summary" class="active">サマリー</button>
+  <button data-tab="alerts">発注アラート</button>
+  <button data-tab="forecast">在庫推移予測</button>
+  <button data-tab="mix">サイズ・カラー</button>
+  <button data-tab="about">このデータについて</button>
+</nav>
+
+<!-- ============ SUMMARY ============ -->
+<div class="tabpanel active" id="tab-summary">
+  <div class="kpi-row" id="kpis"></div>
+
+  <section class="card">
+    <div class="card-head">
+      <div><h2><span class="num">01</span>至急対応 — 欠品中・要発注のアイテム</h2>
+        <div class="desc">販売ペースが速く、リードタイム内に在庫が尽きるアイテム。サイズ別の在庫と在庫月数を表示(上位10件)。</div></div>
+      <button class="btn" data-goto="alerts">発注アラートで全件を見る →</button>
+    </div>
+    <div class="items" id="urgentItems"></div>
+    <div class="legend" id="statusLegend1"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div><h2><span class="num">02</span>モデル別 在庫月数</h2>
+        <div class="desc">在庫 ÷ 月間販売ペース。点線はリードタイムと12ヶ月(過剰の目安)。バーの色はステータス。</div></div>
+    </div>
+    <div class="chart" id="coverChart"></div>
+    <div class="legend" id="statusLegend2"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div><h2><span class="num">03</span>全体在庫の推移予測(12ヶ月)</h2>
+        <div class="desc">現在のペースで売れ続けた場合の月末在庫。入荷予定の到着月を指定すると加算されます。</div></div>
+      <button class="toggle-link" data-toggle="totalProjTable">表を表示</button>
+    </div>
+    <div class="chart" id="totalProjChart"></div>
+    <div id="totalProjTable" class="hidden" style="margin-top:12px"></div>
+  </section>
+</div>
+
+<!-- ============ ALERTS ============ -->
+<div class="tabpanel" id="tab-alerts">
+  <section class="card">
+    <div class="card-head">
+      <div><h2><span class="num">01</span>発注アラート(アイテム × サイズ)</h2>
+        <div class="desc">ステータスで絞り込み。各セルは在庫足数と在庫月数。破線枠は入荷予定のみのSKU。</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="viewCards">カード</button>
+        <button class="btn" id="viewTable">SKU一覧表</button>
+        <button class="btn primary" id="csvBtn">CSV書き出し</button>
+      </div>
+    </div>
+    <div class="filters">
+      <div class="chips" id="statusChips"></div>
+    </div>
+    <div class="filters">
+      <span class="lbl" style="font-size:12px;color:var(--ink-dim)">モデル</span><select id="modelFilter"></select>
+      <span class="lbl" style="font-size:12px;color:var(--ink-dim)">性別</span><select id="genderFilter"><option value="">すべて</option><option value="M">メンズ</option><option value="W">ウィメンズ</option><option value="U">ユニセックス</option></select>
+      <span class="lbl" style="font-size:12px;color:var(--ink-dim)">並び順</span><select id="sortSel"><option value="urgency">緊急度</option><option value="pace">販売ペース順</option><option value="stock">在庫数順</option><option value="cover">在庫月数順</option></select>
+      <span id="alertCount" class="muted" style="font-size:12.5px"></span>
+    </div>
+    <div class="items" id="alertItems"></div>
+    <div id="alertTable" class="hidden"></div>
+    <div class="legend" id="statusLegend3"></div>
+  </section>
+</div>
+
+<!-- ============ FORECAST ============ -->
+<div class="tabpanel" id="tab-forecast">
+  <section class="card">
+    <div class="card-head">
+      <div><h2><span class="num">01</span>アイテム別 在庫推移予測</h2>
+        <div class="desc">アイテム(モデル × 性別 × カラー)を選ぶと、サイズごとの月末在庫予測を表示します。</div></div>
+      <div><select id="itemSel" style="max-width:360px"></select></div>
+    </div>
+    <div id="itemSummary" class="item-meta" style="margin-bottom:14px"></div>
+    <div class="grid2">
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">アイテム在庫の推移予測(足)</div>
+        <div class="chart" id="itemProjChart"></div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px" id="historyTitle">モデルの月次販売実績(足)</div>
+        <div class="chart" id="historyChart"></div>
+      </div>
+    </div>
+    <div style="font-size:13px;font-weight:600;margin:18px 0 8px">サイズ別 月末在庫予測</div>
+    <div class="tbl-wrap" id="sizeHeat"></div>
+    <div class="note">赤 = 在庫切れ、橙 = リードタイム内に切れる水準。枠線の列 = 入荷予定の到着月。ペースは在庫表の2026年販売構成比でサイズへ配分した推定値です。</div>
+  </section>
+</div>
+
+<!-- ============ MIX ============ -->
+<div class="tabpanel" id="tab-mix">
+  <section class="card">
+    <div class="card-head">
+      <div><h2><span class="num">01</span>サイズ別 販売構成比 vs 在庫構成比</h2>
+        <div class="desc">販売構成比(2026年1〜8月・販売実績JSON)より在庫構成比が低いサイズは、次回発注で厚くする候補。</div></div>
+    </div>
+    <div class="grid2">
+      <div><div style="font-size:13px;font-weight:600;margin-bottom:6px">メンズ</div><div class="chart" id="sizeMixM"></div></div>
+      <div><div style="font-size:13px;font-weight:600;margin-bottom:6px">ウィメンズ</div><div class="chart" id="sizeMixW"></div></div>
+    </div>
+    <div class="legend"><span><span class="sw" style="background:var(--s-2026)"></span>販売構成比(2026)</span><span><span class="sw" style="background:var(--s-2025)"></span>在庫構成比(8/31時点)</span></div>
+    <div id="sizeMixNote" class="note"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div><h2><span class="num">02</span>モデル内のカラー構成 — 販売 vs 在庫</h2>
+        <div class="desc">在庫表のアイテム別 2026年販売と現在庫の構成比(同一モデル内)。</div></div>
+      <div><select id="mixModelSel"></select></div>
+    </div>
+    <div class="chart" id="colorMixChart"></div>
+    <div class="legend"><span><span class="sw" style="background:var(--s-2026)"></span>販売構成比(2026・在庫表)</span><span><span class="sw" style="background:var(--s-2025)"></span>在庫構成比</span></div>
+    <div id="colorMixTable" style="margin-top:12px"></div>
+  </section>
+</div>
+
+<!-- ============ ABOUT ============ -->
+<div class="tabpanel" id="tab-about">
+  <section class="card about" id="aboutCard"></section>
+</div>
+
+<div style="text-align:center;font-size:11.5px;color:var(--ink-faint);margin-top:8px" id="footer"></div>
+</div>
+<div id="tip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+</script>
+<script>
+(function(){
+'use strict';
+const D = DATA;
+const STOCK = D.stock, SALES = D.sales, V = SALES.vff_shoes, MM = V.model_monthly;
+const MONTHS26 = SALES.months.filter(m => m.startsWith('2026'));
+const AS_OF = STOCK.as_of;
+const HORIZON = 12;
+const PM = (() => { const out = []; let [y, m] = AS_OF.split('-').map(Number); for (let i = 0; i < HORIZON; i++) { m++; if (m > 12) { m = 1; y++; } out.push(`${y}-${String(m).padStart(2, '0')}`); } return out; })();
+const GENDER_JA = {M: 'メンズ', W: 'ウィメンズ', U: 'ユニセックス'};
+const GENDER_JSON = {M: '男性', W: '女性', U: 'ユニセックス'};
+const STATUS = {
+  out:      {label: '欠品中',   color: 'var(--st-out)',      sev: 0, desc: '在庫0で、販売ペースがある'},
+  order:    {label: '要発注',   color: 'var(--st-order)',    sev: 1, desc: '在庫月数がリードタイム未満'},
+  sizegap:  {label: 'サイズ欠け', color: 'var(--st-sizegap)', sev: 2, desc: '全体は足りるが、売れるサイズが欠品・要発注'},
+  watch:    {label: '注意',     color: 'var(--st-watch)',    sev: 3, desc: '在庫月数がリードタイム+2ヶ月未満'},
+  ok:       {label: '適正',     color: 'var(--st-ok)',       sev: 4, desc: 'リードタイム+2ヶ月〜12ヶ月分'},
+  excess:   {label: '過剰',     color: 'var(--st-excess)',   sev: 5, desc: '在庫月数が12ヶ月超'},
+  idle:     {label: '滞留',     color: 'var(--st-idle)',     sev: 6, desc: '選択期間の販売ペースが0で在庫だけある'},
+  incoming: {label: '入荷待ち', color: 'var(--st-incoming)', sev: 7, desc: '在庫0・販売なし・発注済み(新色/新モデル)'},
+  none:     {label: '在庫なし', color: 'var(--ink-faint)',   sev: 8, desc: '在庫0・販売なし・発注なし'},
+};
+const S = {basis: '3m', exportAdj: true, lead: 3, arrival: '', tab: 'summary',
+           alertStatus: new Set(['out', 'order', 'sizegap', 'watch']), alertModel: '', alertGender: '', alertSort: 'urgency', alertView: 'cards',
+           item: null, mixModel: null};
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const fmt = n => Math.round(n).toLocaleString('ja-JP');
+const fmt1 = n => (Math.round(n * 10) / 10).toLocaleString('ja-JP', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+const pct = x => (x * 100).toFixed(1) + '%';
+const mLabel = m => { const [y, mo] = m.split('-'); return `${y.slice(2)}/${mo}`; };
+const mLabelJa = m => { const [y, mo] = m.split('-'); return `${y}年${+mo}月`; };
+const coverText = (cover, v, stock) => v <= 0 ? (stock > 0 ? '—' : '0') : (stock <= 0 ? '0' : cover >= 24 ? '24+' : fmt1(cover));
+const tip = $('tip');
+function showTip(e, html) { tip.innerHTML = html; tip.style.display = 'block'; const w = tip.offsetWidth, h = tip.offsetHeight; let x = e.clientX + 14, y = e.clientY + 14; if (x + w > innerWidth - 8) x = e.clientX - w - 14; if (y + h > innerHeight - 8) y = e.clientY - h - 14; tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+function hideTip() { tip.style.display = 'none'; }
+function niceMax(v, steps) { if (v <= 0) return {max: 1, step: 1}; const raw = v / steps, p = Math.pow(10, Math.floor(Math.log10(raw))); const f = raw / p; const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; return {max: Math.ceil(v / step) * step, step}; }
+
+// ---------- model velocity ----------
+function basisMonths() { return S.basis === '3m' ? MONTHS26.slice(-3) : S.basis === '6m' ? MONTHS26.slice(-6) : MONTHS26.slice(); }
+function modelQty(model, month) { let q = +((MM[model] || {})[month] || {}).qty || 0; if (S.exportAdj && month === D.export_month) q -= (D.export_adjust[model] || 0); return Math.max(q, 0); }
+function modelVelocity(model) { const ms = basisMonths(); return ms.reduce((a, m) => a + modelQty(model, m), 0) / ms.length; }
+function monthsOnSale2026(sku) { if (!sku.first_import) return 0; if (sku.first_import < MONTHS26[0]) return MONTHS26.length; const i = MONTHS26.indexOf(sku.first_import); return i < 0 ? 0 : MONTHS26.length - i; }
+
+// ---------- compute everything for the current settings ----------
+let R = null; // result cache
+function compute() {
+  const arrivalIdx = S.arrival ? PM.indexOf(S.arrival) + 1 : 0; // 1-based month index, 0 = not counted
+  const skus = STOCK.skus.map(s => ({...s}));
+  const wSum = {};
+  skus.forEach(s => { s.w = s.s2026 > 0 ? s.s2026 / Math.max(monthsOnSale2026(s), 1) : 0; if (s.sales_model) wSum[s.sales_model] = (wSum[s.sales_model] || 0) + s.w; });
+  const vModel = {}; Object.keys(wSum).forEach(m => vModel[m] = modelVelocity(m));
+  skus.forEach(s => {
+    s.v = (s.sales_model && wSum[s.sales_model] > 0) ? vModel[s.sales_model] * s.w / wSum[s.sales_model] : 0;
+    s.cover = s.v > 0 ? s.stock / s.v : (s.stock > 0 ? Infinity : 0);
+    // month-by-month projection (arrival counted at the start of its month)
+    let st = s.stock; s.proj = []; s.stockoutT = null;
+    for (let t = 1; t <= HORIZON; t++) { if (arrivalIdx && t === arrivalIdx) st += s.on_order; st = Math.max(0, st - s.v); s.proj.push(st); if (s.stockoutT === null && st <= 0 && s.v > 0) s.stockoutT = t; }
+    // effective run-out (continuous), used for the status when an arrival month is set
+    if (s.v <= 0) s.runout = s.cover;
+    else if (arrivalIdx && s.on_order > 0 && s.cover >= arrivalIdx - 1) s.runout = (s.stock + s.on_order) / s.v;
+    else s.runout = s.cover;
+    s.status = statusOf(s, arrivalIdx);
+  });
+  // items = model + gender + color
+  const itemMap = new Map();
+  skus.forEach(s => {
+    const key = s.item; let it = itemMap.get(key);
+    if (!it) { it = {key, name: `${s.model} ${s.gender} (${s.color})`, model: s.model, gender: s.gender, color: s.color, sales_model: s.sales_model, stock: 0, on_order: 0, v: 0, s2026: 0, sizes: [], first_import: null}; itemMap.set(key, it); }
+    it.stock += s.stock; it.on_order += s.on_order; it.v += s.v; it.s2026 += s.s2026; it.sizes.push(s);
+    if (s.first_import && (!it.first_import || s.first_import < it.first_import)) it.first_import = s.first_import;
+  });
+  const items = [...itemMap.values()];
+  items.forEach(it => {
+    it.sizes.sort((a, b) => a.size_num - b.size_num);
+    it.cover = it.v > 0 ? it.stock / it.v : (it.stock > 0 ? Infinity : 0);
+    it.proj = PM.map((_, i) => it.sizes.reduce((a, s) => a + s.proj[i], 0));
+    it.runout = it.v <= 0 ? it.cover : (arrivalIdx && it.on_order > 0 && it.cover >= arrivalIdx - 1) ? (it.stock + it.on_order) / it.v : it.cover;
+    const base = statusOf(it, arrivalIdx);
+    it.gapSizes = it.sizes.filter(s => (s.status === 'out' || s.status === 'order') && s.v >= 0.5);
+    it.status = (['ok', 'watch', 'excess'].includes(base) && it.gapSizes.length) ? 'sizegap' : base;
+    it.stockoutT = it.sizes.reduce((m, s) => s.stockoutT !== null && (m === null || s.stockoutT < m) ? s.stockoutT : m, null);
+  });
+  // model groups (Excel model)
+  const modelMap = new Map();
+  items.forEach(it => { let g = modelMap.get(it.model); if (!g) { g = {model: it.model, sales_model: it.sales_model, stock: 0, on_order: 0, v: 0, s2026: 0, items: []}; modelMap.set(it.model, g); } g.stock += it.stock; g.on_order += it.on_order; g.v += it.v; g.s2026 += it.s2026; g.items.push(it); });
+  const models = [...modelMap.values()];
+  models.forEach(g => { g.cover = g.v > 0 ? g.stock / g.v : (g.stock > 0 ? Infinity : 0); g.runout = g.v <= 0 ? g.cover : (arrivalIdx && g.on_order > 0 && g.cover >= arrivalIdx - 1) ? (g.stock + g.on_order) / g.v : g.cover; g.status = statusOf(g, arrivalIdx); g.proj = PM.map((_, i) => g.items.reduce((a, it) => a + it.proj[i], 0)); });
+  models.sort((a, b) => b.s2026 - a.s2026);
+  const total = {stock: skus.reduce((a, s) => a + s.stock, 0), on_order: skus.reduce((a, s) => a + s.on_order, 0), v: skus.reduce((a, s) => a + s.v, 0),
+                 proj: PM.map((_, i) => skus.reduce((a, s) => a + s.proj[i], 0))};
+  total.cover = total.v > 0 ? total.stock / total.v : Infinity;
+  R = {skus, items, models, total, arrivalIdx, vModel};
+}
+function statusOf(x, arrivalIdx) {
+  if (x.stock <= 0) { if (x.v > 0) return 'out'; if (x.on_order > 0) return 'incoming'; return 'none'; }
+  if (x.v <= 0) return 'idle';
+  const r = x.runout;
+  if (r < S.lead) return 'order';
+  if (r < S.lead + 2) return 'watch';
+  if (r > 12) return 'excess';
+  return 'ok';
+}
+
+// ---------- rendering: shared pieces ----------
+function badge(st) { const d = STATUS[st]; return `<span class="badge st-${st}"><span class="dot"></span>${d.label}</span>`; }
+function legendHtml(keys) { return keys.map(k => `<span><span class="sw" style="background:${STATUS[k].color}"></span>${STATUS[k].label} <span class="muted">— ${STATUS[k].desc}</span></span>`).join(''); }
+function sizeRun(it) {
+  return `<div class="sizes">${it.sizes.map(s => {
+    const ct = s.v <= 0 ? (s.stock > 0 ? '滞留' : (s.on_order > 0 ? '入荷待ち' : '—')) : (s.stock <= 0 ? '欠品' : coverText(s.cover, s.v, s.stock) + 'ヶ月');
+    return `<div class="sz st-${s.status}" data-row="${s.row}"><div class="s">${esc(s.size)}</div><div class="q">${fmt(s.stock)}</div><div class="c">${ct}</div>${s.on_order ? `<div class="o">+${s.on_order}</div>` : ''}</div>`;
+  }).join('')}</div>`;
+}
+function itemCard(it, opts = {}) {
+  const arrivalNote = (S.arrival && it.on_order > 0) ? `<span>入荷後 <b>${it.runout >= 24 ? '24+' : fmt1(it.runout)}ヶ月</b></span>` : '';
+  const gap = it.gapSizes && it.gapSizes.length ? `<span>欠けサイズ <b>${it.gapSizes.map(s => s.size).join(' ')}</b></span>` : '';
+  const so = it.stockoutT ? `<span>最初の欠品 <b>${mLabelJa(PM[it.stockoutT - 1])}</b></span>` : '';
+  return `<div class="item" data-item="${esc(it.key)}">
+    <div class="item-head">
+      <span class="item-name">${esc(it.model)} <span class="gender">${esc(it.gender)}</span> ${esc(it.color)}</span>
+      ${badge(it.status)}
+      <span class="item-meta"><span>在庫 <b>${fmt(it.stock)}</b>足</span><span>ペース <b>${fmt1(it.v)}</b>足/月</span><span>在庫月数 <b>${coverText(it.cover, it.v, it.stock)}</b></span>${it.on_order ? `<span>入荷予定 <b>+${fmt(it.on_order)}</b></span>` : ''}${arrivalNote}${gap}${so}</span>
+      ${opts.link ? `<button class="toggle-link" data-forecast="${esc(it.key)}" style="margin-left:auto">推移を見る →</button>` : ''}
+    </div>
+    ${sizeRun(it)}
+  </div>`;
+}
+function attachSizeTips(root) {
+  root.querySelectorAll('.sz').forEach(el => {
+    const s = R.skus.find(x => x.row === +el.dataset.row); if (!s) return;
+    el.addEventListener('mousemove', e => showTip(e, `<b>${esc(s.model)} ${esc(s.gender)} ${esc(s.color)} · ${esc(s.size)}</b><br>在庫 ${fmt(s.stock)}足 / ペース ${fmt1(s.v)}足/月 / 在庫月数 ${coverText(s.cover, s.v, s.stock)}<br>ステータス: ${STATUS[s.status].label}${s.on_order ? `<br>入荷予定 +${s.on_order}足` : ''}${s.stockoutT ? `<br>欠品予測: ${mLabelJa(PM[s.stockoutT - 1])}` : ''}<br><span class="muted">2026年販売 ${s.s2026}足 · 初入荷 ${s.first_import || '未入荷'}</span>`));
+    el.addEventListener('mouseleave', hideTip);
+  });
+}
+
+// ---------- charts ----------
+function coverBarChart(rows) {
+  const W = 1080, rowH = 26, padL = 150, padR = 250, padT = 26, padB = 8;
+  const H = padT + rows.length * rowH + padB;
+  const CAP = 24, plotW = W - padL - padR;
+  const x = v => padL + Math.min(v, CAP) / CAP * plotW;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMinYMin meet">`;
+  [0, 6, 12, 18, 24].forEach(v => { svg += `<line class="grid" x1="${x(v)}" y1="${padT - 6}" x2="${x(v)}" y2="${H - padB}"></line><text x="${x(v)}" y="${padT - 10}" text-anchor="middle">${v === 24 ? '24+' : v}ヶ月</text>`; });
+  [[S.lead, 'リードタイム'], [12, '過剰目安']].forEach(([v, l]) => { svg += `<line class="thr" x1="${x(v)}" y1="${padT - 4}" x2="${x(v)}" y2="${H - padB}"></line><text class="thr-label" x="${x(v) + 4}" y="${H - padB - 2}">${l}</text>`; });
+  rows.forEach((g, i) => {
+    const y = padT + i * rowH, val = g.v > 0 ? g.cover : (g.stock > 0 ? CAP : 0);
+    const bw = Math.max(x(val) - padL, val > 0 ? 3 : 0);
+    svg += `<text x="${padL - 10}" y="${y + rowH / 2 + 4}" text-anchor="end" class="val">${esc(g.model)}</text>`;
+    svg += `<rect x="${padL}" y="${y + 6}" width="${bw}" height="${rowH - 12}" rx="3" fill="${STATUS[g.status].color}" class="hit-bar" data-i="${i}"></rect>`;
+    const lbl = g.v > 0 ? `${coverText(g.cover, g.v, g.stock)}ヶ月 · 在庫 ${fmt(g.stock)} · ${fmt1(g.v)}/月` : (g.stock > 0 ? `滞留 · 在庫 ${fmt(g.stock)}` : (g.on_order ? `入荷待ち +${fmt(g.on_order)}` : '在庫なし'));
+    svg += `<text x="${padL + bw + 8}" y="${y + rowH / 2 + 4}" class="val" style="font-size:11.5px">${esc(lbl)}${g.on_order && g.v > 0 ? ` <tspan fill="var(--st-incoming)">(+${fmt(g.on_order)})</tspan>` : ''}</text>`;
+  });
+  svg += '</svg>';
+  const el = $('coverChart'); el.innerHTML = svg;
+  el.querySelectorAll('.hit-bar').forEach(r => { const g = rows[+r.dataset.i]; r.addEventListener('mousemove', e => showTip(e, `<b>${esc(g.model)}</b> ${STATUS[g.status].label}<br>在庫 ${fmt(g.stock)}足 / ペース ${fmt1(g.v)}足/月 / 在庫月数 ${coverText(g.cover, g.v, g.stock)}<br>アイテム数 ${g.items.length} · 2026年販売(在庫表) ${fmt(g.s2026)}足${g.on_order ? `<br>入荷予定 +${fmt(g.on_order)}` : ''}`)); r.addEventListener('mouseleave', hideTip); });
+}
+
+function lineChart(elId, labels, series, opts = {}) {
+  const W = opts.w || 1080, H = opts.h || 300, padL = 56, padR = 24, padT = 18, padB = 34;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxV = Math.max(1, ...series.flatMap(s => s.values));
+  const {max, step} = maxV < 5 ? {max: 5, step: 1} : niceMax(maxV, 4);
+  const x = i => padL + (labels.length > 1 ? i / (labels.length - 1) * plotW : plotW / 2);
+  const y = v => padT + plotH - v / max * plotH;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMinYMin meet">`;
+  for (let v = 0; v <= max + 1e-9; v += step) svg += `<line class="grid" x1="${padL}" y1="${y(v)}" x2="${W - padR}" y2="${y(v)}"></line><text x="${padL - 8}" y="${y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
+  labels.forEach((l, i) => svg += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle">${esc(mLabel(l))}</text>`);
+  if (opts.marker != null && opts.marker >= 0) svg += `<line class="thr" x1="${x(opts.marker)}" y1="${padT}" x2="${x(opts.marker)}" y2="${padT + plotH}"></line><text class="thr-label" x="${x(opts.marker) + 4}" y="${padT + 12}">${esc(opts.markerLabel || '')}</text>`;
+  series.forEach(s => {
+    const d = s.values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    svg += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" ${s.dashed ? 'stroke-dasharray="5 4"' : ''}></path>`;
+    s.values.forEach((v, i) => svg += `<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="${s.color}" stroke="var(--panel)" stroke-width="2"></circle>`);
+    const last = s.values.length - 1;
+    svg += `<text class="dl" x="${x(last) - 4}" y="${y(s.values[last]) - 9}" text-anchor="end">${fmt(s.values[last])}</text>`;
+  });
+  const bw = plotW / Math.max(labels.length - 1, 1);
+  labels.forEach((l, i) => svg += `<rect class="hit" x="${x(i) - bw / 2}" y="${padT}" width="${bw}" height="${plotH}" data-i="${i}"></rect>`);
+  svg += '</svg>';
+  const el = $(elId); el.innerHTML = svg + (series.length > 1 ? `<div class="legend">${series.map(s => `<span><span class="sw" style="background:${s.color}"></span>${esc(s.name)}</span>`).join('')}</div>` : '');
+  el.querySelectorAll('.hit').forEach(r => { r.addEventListener('mousemove', e => { const i = +r.dataset.i; showTip(e, `<b>${esc(mLabelJa(labels[i]))}</b><br>` + series.map(s => `${esc(s.name)}: ${fmt(s.values[i])}${opts.unit || ''}`).join('<br>')); }); r.addEventListener('mouseleave', hideTip); });
+}
+
+function groupedBars(elId, cats, series, opts = {}) {
+  const W = opts.w || 520, H = opts.h || 240, padL = 44, padR = 12, padT = 14, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxV = Math.max(0.0001, ...series.flatMap(s => s.values));
+  const {max, step} = opts.percent ? niceMax(maxV * 100, 4) : niceMax(maxV, 4);
+  const sc = opts.percent ? 100 : 1;
+  const bandW = plotW / Math.max(cats.length, 1), groupW = Math.min(bandW * 0.72, 70), gap = 2;
+  const barW = (groupW - gap * (series.length - 1)) / series.length;
+  const y = v => padT + plotH - v * sc / max * plotH;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMinYMin meet">`;
+  for (let v = 0; v <= max + 1e-9; v += step) svg += `<line class="grid" x1="${padL}" y1="${y(v / sc)}" x2="${W - padR}" y2="${y(v / sc)}"></line><text x="${padL - 6}" y="${y(v / sc) + 4}" text-anchor="end">${opts.percent ? v + '%' : fmt(v)}</text>`;
+  cats.forEach((c, i) => {
+    const cx = padL + bandW * i + bandW / 2;
+    svg += `<text x="${cx}" y="${H - 10}" text-anchor="middle">${esc(c)}</text>`;
+    series.forEach((s, si) => { const v = s.values[i], bx = cx - groupW / 2 + si * (barW + gap); const top = y(v); svg += `<rect x="${bx}" y="${top}" width="${barW}" height="${Math.max(padT + plotH - top, 0)}" rx="2" fill="${s.color}" class="gb" data-i="${i}" data-s="${si}"></rect>`; });
+  });
+  svg += '</svg>';
+  const el = $(elId); el.innerHTML = svg;
+  el.querySelectorAll('.gb').forEach(r => { r.addEventListener('mousemove', e => { const i = +r.dataset.i, si = +r.dataset.s; showTip(e, `<b>${esc(cats[i])}</b><br>` + series.map(s => `${esc(s.name)}: ${opts.percent ? pct(s.values[i]) : fmt(s.values[i])}${opts.percent ? '' : (opts.unit || '')}`).join('<br>') + (opts.extra ? '<br>' + opts.extra(i) : '')); }); r.addEventListener('mouseleave', hideTip); });
+}
+
+function historyChart(elId, salesModel) {
+  const months = MONTHS26, prev = SALES.prev_months;
+  const W = 520, H = 240, padL = 44, padR = 12, padT = 14, padB = 30, plotW = W - padL - padR, plotH = H - padT - padB;
+  const raw26 = months.map(m => +((MM[salesModel] || {})[m] || {}).qty || 0);
+  const exp = months.map(m => m === D.export_month ? (D.export_adjust[salesModel] || 0) : 0);
+  const dom26 = raw26.map((q, i) => Math.max(q - exp[i], 0));
+  const v25 = months.map((m, i) => { const pm = prev[i]; return pm ? (+((MM[salesModel] || {})[pm] || {}).qty || 0) : null; });
+  const {max, step} = niceMax(Math.max(1, ...raw26, ...v25.map(v => v || 0)), 4);
+  const y = v => padT + plotH - v / max * plotH;
+  const bandW = plotW / months.length, gap = 2, barW = Math.min((bandW * 0.72 - gap) / 2, 26);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMinYMin meet">`;
+  for (let v = 0; v <= max + 1e-9; v += step) svg += `<line class="grid" x1="${padL}" y1="${y(v)}" x2="${W - padR}" y2="${y(v)}"></line><text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
+  const basis = new Set(basisMonths());
+  months.forEach((m, i) => {
+    const cx = padL + bandW * i + bandW / 2;
+    svg += `<text x="${cx}" y="${H - 10}" text-anchor="middle" ${basis.has(m) ? 'style="fill:var(--ink);font-weight:600"' : ''}>${+m.slice(5)}月</text>`;
+    const x25 = cx - barW - gap / 2, x26 = cx + gap / 2;
+    if (v25[i] !== null) svg += `<rect x="${x25}" y="${y(v25[i])}" width="${barW}" height="${Math.max(padT + plotH - y(v25[i]), 0)}" rx="2" fill="var(--s-2025)" class="hb" data-i="${i}"></rect>`;
+    svg += `<rect x="${x26}" y="${y(dom26[i])}" width="${barW}" height="${Math.max(padT + plotH - y(dom26[i]), 0)}" rx="2" fill="var(--s-2026)" class="hb" data-i="${i}"></rect>`;
+    if (exp[i] > 0 && !S.exportAdj) svg += `<rect x="${x26}" y="${y(raw26[i])}" width="${barW}" height="${Math.max(y(dom26[i]) - y(raw26[i]) - 2, 0)}" rx="2" fill="var(--s-export)" class="hb" data-i="${i}"></rect>`;
+    else if (exp[i] > 0) svg += `<rect x="${x26}" y="${y(raw26[i])}" width="${barW}" height="${Math.max(y(dom26[i]) - y(raw26[i]) - 2, 0)}" rx="2" fill="none" stroke="var(--s-export)" stroke-dasharray="3 3" class="hb" data-i="${i}"></rect>`;
+  });
+  svg += '</svg>';
+  const el = $(elId); el.innerHTML = svg + `<div class="legend"><span><span class="sw" style="background:var(--s-2025)"></span>2025年 同月</span><span><span class="sw" style="background:var(--s-2026)"></span>2026年${S.exportAdj ? '(輸出除く)' : ''}</span><span><span class="sw" style="background:${S.exportAdj ? 'transparent;border:1px dashed var(--s-export)' : 'var(--s-export)'}"></span>6月の輸出(推定)</span><span class="muted">太字の月 = ペース算出に使用</span></div>`;
+  el.querySelectorAll('.hb').forEach(r => { r.addEventListener('mousemove', e => { const i = +r.dataset.i; showTip(e, `<b>${+months[i].slice(5)}月</b><br>2026年: ${fmt(raw26[i])}足${exp[i] ? ` (うち輸出推定 ${fmt(exp[i])}、国内 ${fmt(dom26[i])})` : ''}<br>2025年: ${v25[i] === null ? '—' : fmt(v25[i]) + '足'}`); }); r.addEventListener('mouseleave', hideTip); });
+}
+
+// ---------- views ----------
+function renderPeriod() {
+  $('periodLine').innerHTML = `在庫: <b>${AS_OF}</b> 時点(${esc(STOCK.source_file)})<br>販売実績: <b>${MONTHS26[0]}〜${MONTHS26[MONTHS26.length - 1]}</b>(sales-1st-half-26-dashboard)`;
+  $('exportQty').textContent = fmt(D.export_total);
+  $('onOrderQty').textContent = fmt(STOCK.skus.reduce((a, s) => a + s.on_order, 0));
+  const sel = $('arrivalSel'); sel.innerHTML = `<option value="">未定(加味しない)</option>` + PM.slice(0, 6).map(m => `<option value="${m}">${mLabelJa(m)}</option>`).join('');
+  $('footer').textContent = `ビルド ${D.built_at} · 在庫 ${STOCK.sku_count} SKU · 販売実績ソース ${SALES.source_repo}@${(SALES.source_commit || '').slice(0, 7)}`;
+}
+function renderSummary() {
+  const T = R.total, urgentSkus = R.skus.filter(s => s.status === 'out' || s.status === 'order');
+  const outSkus = R.skus.filter(s => s.status === 'out').length;
+  const urgentItems = R.items.filter(it => ['out', 'order', 'sizegap'].includes(it.status));
+  const soonest = R.items.filter(it => it.stockoutT).sort((a, b) => a.stockoutT - b.stockoutT || b.v - a.v)[0];
+  $('kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">総在庫(${AS_OF})</div><div class="kpi-value">${fmt(T.stock)}<small>足</small></div><div class="kpi-sub">${STOCK.sku_count} SKU · ${R.items.length} アイテム · ${R.models.length} モデル</div></div>
+    <div class="kpi"><div class="kpi-label">月間販売ペース(推定)</div><div class="kpi-value">${fmt(T.v)}<small>足/月</small></div><div class="kpi-sub">${S.basis === '3m' ? '直近3ヶ月' : S.basis === '6m' ? '直近6ヶ月' : '2026年1〜8月'}平均${S.exportAdj ? '・輸出除く' : ''}</div></div>
+    <div class="kpi"><div class="kpi-label">在庫月数(全体)</div><div class="kpi-value">${fmt1(T.cover)}<small>ヶ月</small></div><div class="kpi-sub">売れ筋に偏りがあるため、モデル別・サイズ別で確認</div></div>
+    <div class="kpi alert"><div class="kpi-label">欠品中・要発注 SKU</div><div class="kpi-value">${fmt(urgentSkus.length)}<small>SKU</small></div><div class="kpi-sub">うち欠品中 ${outSkus} · 対象 ${urgentItems.length} アイテム${soonest ? ` · 最短欠品 ${mLabelJa(PM[soonest.stockoutT - 1])}` : ''}</div></div>
+    <div class="kpi info"><div class="kpi-label">入荷予定(発注済み)</div><div class="kpi-value">${fmt(T.on_order)}<small>足</small></div><div class="kpi-sub">${S.arrival ? mLabelJa(S.arrival) + ' 到着として計算中' : '到着月未定(予測に未反映)'}</div></div>`;
+  const top = R.items.filter(it => ['out', 'order', 'sizegap'].includes(it.status)).sort(bySeverityThenPace).slice(0, 10);
+  $('urgentItems').innerHTML = top.length ? top.map(it => itemCard(it, {link: true})).join('') : '<div class="empty">現在の条件では、欠品中・要発注のアイテムはありません。</div>';
+  attachSizeTips($('urgentItems'));
+  $('statusLegend1').innerHTML = legendHtml(['out', 'order', 'sizegap', 'watch', 'ok', 'excess', 'idle', 'incoming']);
+  $('statusLegend2').innerHTML = legendHtml(['order', 'watch', 'ok', 'excess', 'idle']);
+  const rows = R.models.slice().sort((a, b) => (a.v > 0 ? a.cover : 99) - (b.v > 0 ? b.cover : 99));
+  coverBarChart(rows);
+  const series = [{name: '在庫(入荷予定を含まず)', color: 'var(--s-2026)', values: R.total.proj}];
+  if (S.arrival) { // recompute without arrival for the comparison line
+    const saved = S.arrival; S.arrival = ''; compute(); const noArr = R.total.proj.slice(); S.arrival = saved; compute();
+    series[0] = {name: '在庫(入荷予定を含まず)', color: 'var(--s-2026)', values: noArr, dashed: true};
+    series.push({name: `在庫(${mLabelJa(S.arrival)}に ${fmt(T.on_order)}足 入荷)`, color: 'var(--s-proj)', values: R.total.proj});
+  }
+  lineChart('totalProjChart', PM, series, {unit: '足', marker: S.arrival ? PM.indexOf(S.arrival) : null, markerLabel: '入荷'});
+  $('totalProjTable').innerHTML = `<div class="tbl-wrap" style="max-height:none"><table class="tbl"><thead><tr><th class="l">月</th>${series.map(s => `<th>${esc(s.name)}</th>`).join('')}<th>販売見込(足)</th></tr></thead><tbody>${PM.map((m, i) => `<tr><td class="l">${mLabelJa(m)}</td>${series.map(s => `<td class="num">${fmt(s.values[i])}</td>`).join('')}<td class="num">${fmt((i === 0 ? T.stock + (R.arrivalIdx === 1 ? T.on_order : 0) : series[series.length - 1].values[i - 1] + (R.arrivalIdx === i + 1 ? T.on_order : 0)) - series[series.length - 1].values[i])}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function bySeverityThenPace(a, b) { return STATUS[a.status].sev - STATUS[b.status].sev || b.v - a.v; }
+
+function renderAlerts() {
+  const counts = {}; R.items.forEach(it => counts[it.status] = (counts[it.status] || 0) + 1);
+  $('statusChips').innerHTML = Object.keys(STATUS).map(k => `<span class="chip st-${k} ${S.alertStatus.has(k) ? 'active' : ''}" data-st="${k}"><span class="dot" style="background:${STATUS[k].color}"></span>${STATUS[k].label}<span class="n">${counts[k] || 0}</span></span>`).join('');
+  $('statusChips').querySelectorAll('.chip').forEach(c => c.onclick = () => { const k = c.dataset.st; if (S.alertStatus.has(k)) S.alertStatus.delete(k); else S.alertStatus.add(k); renderAlerts(); });
+  const mf = $('modelFilter'); const cur = mf.value;
+  mf.innerHTML = `<option value="">すべて</option>` + R.models.map(g => `<option value="${esc(g.model)}">${esc(g.model)}</option>`).join(''); mf.value = S.alertModel;
+  let list = R.items.filter(it => S.alertStatus.has(it.status) && (!S.alertModel || it.model === S.alertModel) && (!S.alertGender || it.gender === S.alertGender));
+  const sorters = {urgency: bySeverityThenPace, pace: (a, b) => b.v - a.v, stock: (a, b) => b.stock - a.stock, cover: (a, b) => (a.v > 0 ? a.cover : 999) - (b.v > 0 ? b.cover : 999)};
+  list.sort(sorters[S.alertSort]);
+  $('alertCount').textContent = `${list.length} アイテム / ${list.reduce((a, it) => a + it.sizes.length, 0)} SKU`;
+  $('viewCards').classList.toggle('primary', S.alertView === 'cards'); $('viewTable').classList.toggle('primary', S.alertView === 'table');
+  $('alertItems').classList.toggle('hidden', S.alertView !== 'cards'); $('alertTable').classList.toggle('hidden', S.alertView !== 'table');
+  if (S.alertView === 'cards') { $('alertItems').innerHTML = list.length ? list.map(it => itemCard(it, {link: true})).join('') : '<div class="empty">該当するアイテムはありません。ステータスの絞り込みを変えてください。</div>'; attachSizeTips($('alertItems')); }
+  else {
+    const skus = list.flatMap(it => it.sizes).sort((a, b) => STATUS[a.status].sev - STATUS[b.status].sev || b.v - a.v);
+    $('alertTable').innerHTML = `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="l">モデル</th><th class="l">性別</th><th class="l">カラー</th><th class="l">サイズ</th><th>在庫</th><th>入荷予定</th><th>ペース/月</th><th>在庫月数</th><th class="l">ステータス</th><th class="l">欠品予測</th><th>2026販売</th><th class="l">初入荷</th></tr></thead><tbody>${skus.map(s => `<tr><td class="l">${esc(s.model)}</td><td class="l">${esc(s.gender)}</td><td class="l">${esc(s.color)}</td><td class="l">${esc(s.size)}</td><td class="num">${fmt(s.stock)}</td><td class="num">${s.on_order ? '+' + fmt(s.on_order) : ''}</td><td class="num">${fmt1(s.v)}</td><td class="num">${coverText(s.cover, s.v, s.stock)}</td><td class="l">${badge(s.status)}</td><td class="l">${s.stockoutT ? mLabelJa(PM[s.stockoutT - 1]) : ''}</td><td class="num">${fmt(s.s2026)}</td><td class="l">${esc(s.first_import || '')}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  $('statusLegend3').innerHTML = legendHtml(Object.keys(STATUS));
+}
+function exportCsv() {
+  const head = ['モデル', '性別', 'カラー', 'サイズ', '在庫', '入荷予定', 'ペース(足/月)', '在庫月数', 'ステータス', '欠品予測月', '2026年販売(在庫表)', '2025年販売', '初入荷', '販売ペース基準', '輸出除外', 'リードタイム(月)', '入荷到着月'];
+  const rows = R.skus.slice().sort((a, b) => STATUS[a.status].sev - STATUS[b.status].sev || b.v - a.v).map(s => [s.model, s.gender, s.color, s.size, s.stock, s.on_order, s.v.toFixed(2), s.v > 0 ? (s.cover >= 99 ? '99+' : s.cover.toFixed(1)) : (s.stock > 0 ? 'inf' : '0'), STATUS[s.status].label, s.stockoutT ? PM[s.stockoutT - 1] : '', s.s2026, s.s2025, s.first_import || '', S.basis, S.exportAdj ? 'yes' : 'no', S.lead, S.arrival || '']);
+  const csv = '﻿' + [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'})); a.download = `vff_stock_alerts_${AS_OF}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function renderForecast() {
+  const sel = $('itemSel');
+  const sorted = R.items.slice().sort((a, b) => a.model.localeCompare(b.model) || a.gender.localeCompare(b.gender) || b.s2026 - a.s2026);
+  // default: the fastest-selling item that still has stock but needs attention (a flat zero line is a poor first view)
+  if (!S.item || !R.items.find(it => it.key === S.item)) { const d = R.items.filter(it => it.v > 0 && it.stock > 0 && ['order', 'sizegap', 'watch'].includes(it.status)).sort((a, b) => b.v - a.v)[0] || R.items.filter(it => it.v > 0).sort(bySeverityThenPace)[0] || R.items[0]; S.item = d.key; }
+  let html = '', curModel = null;
+  sorted.forEach(it => { if (it.model !== curModel) { if (curModel !== null) html += '</optgroup>'; curModel = it.model; html += `<optgroup label="${esc(it.model)}">`; } html += `<option value="${esc(it.key)}" ${it.key === S.item ? 'selected' : ''}>${esc(it.model)} ${esc(it.gender)} (${esc(it.color)}) — ${STATUS[it.status].label}</option>`; });
+  sel.innerHTML = html + '</optgroup>';
+  const it = R.items.find(x => x.key === S.item);
+  $('itemSummary').innerHTML = `${badge(it.status)} <span>在庫 <b>${fmt(it.stock)}</b>足</span><span>ペース <b>${fmt1(it.v)}</b>足/月</span><span>在庫月数 <b>${coverText(it.cover, it.v, it.stock)}</b></span>${it.on_order ? `<span>入荷予定 <b>+${fmt(it.on_order)}</b>${S.arrival ? `(${mLabelJa(S.arrival)})` : ''}</span>` : ''}<span>2026年販売(在庫表) <b>${fmt(it.s2026)}</b>足</span><span>初入荷 <b>${it.first_import || '未入荷'}</b></span><span class="muted">配分元: ${esc(it.sales_model || '—')} のペース ${it.sales_model ? fmt1(R.vModel[it.sales_model] || 0) : '—'}足/月</span>`;
+  const series = [{name: '在庫予測', color: 'var(--s-2026)', values: it.proj}];
+  lineChart('itemProjChart', PM, series, {w: 520, h: 240, unit: '足', marker: S.arrival && it.on_order ? PM.indexOf(S.arrival) : null, markerLabel: '入荷'});
+  $('historyTitle').textContent = `${it.sales_model || it.model} の月次販売実績(足・全カラー合計)`;
+  if (it.sales_model) historyChart('historyChart', it.sales_model); else $('historyChart').innerHTML = '<div class="empty">販売実績JSONに対応するモデルがありません。</div>';
+  const arrI = S.arrival ? PM.indexOf(S.arrival) : -1;
+  $('sizeHeat').innerHTML = `<table class="tbl heat"><thead><tr><th class="l">サイズ</th><th>ペース/月</th><th>${mLabel(AS_OF.slice(0, 7))} 現在</th>${PM.map((m, i) => `<th ${i === arrI ? 'class="arr"' : ''}>${mLabel(m)}</th>`).join('')}</tr></thead><tbody>${it.sizes.map(s => `<tr><td class="l">${esc(s.size)} ${s.on_order ? `<span style="color:var(--st-incoming);font-size:11px">+${s.on_order}</span>` : ''}</td><td>${fmt1(s.v)}</td><td>${fmt(s.stock)}</td>${s.proj.map((v, i) => { const cls = (v <= 0 && s.v > 0) ? 'zero' : (s.v > 0 && v / s.v < S.lead ? 'low' : ''); return `<td class="${cls} ${i === arrI ? 'arr' : ''}">${s.v > 0 || s.stock > 0 ? fmt(v) : ''}</td>`; }).join('')}</tr>`).join('')}<tr style="font-weight:700"><td class="l">合計</td><td>${fmt1(it.v)}</td><td>${fmt(it.stock)}</td>${it.proj.map((v, i) => `<td class="${i === arrI ? 'arr' : ''}">${fmt(v)}</td>`).join('')}</tr></tbody></table>`;
+}
+
+function renderMix() {
+  // size mix: sales share (JSON gender_size_monthly, 2026) vs stock share (stock sheet), per gender
+  const notes = [];
+  ['M', 'W'].forEach(g => {
+    const gs = V.gender_size_monthly[GENDER_JSON[g]] || {};
+    const salesBySize = {}; Object.keys(gs).forEach(sz => salesBySize[+sz] = MONTHS26.reduce((a, m) => a + (+((gs[sz] || {})[m] || {}).qty || 0), 0));
+    const stockBySize = {}; R.skus.filter(s => s.gender === g).forEach(s => stockBySize[s.size_num] = (stockBySize[s.size_num] || 0) + s.stock);
+    const sizes = [...new Set([...Object.keys(salesBySize), ...Object.keys(stockBySize)].map(Number))].filter(sz => (salesBySize[sz] || 0) + (stockBySize[sz] || 0) > 0).sort((a, b) => a - b);
+    const sT = sizes.reduce((a, sz) => a + (salesBySize[sz] || 0), 0) || 1, kT = sizes.reduce((a, sz) => a + (stockBySize[sz] || 0), 0) || 1;
+    const sales = sizes.map(sz => (salesBySize[sz] || 0) / sT), stock = sizes.map(sz => (stockBySize[sz] || 0) / kT);
+    groupedBars(g === 'M' ? 'sizeMixM' : 'sizeMixW', sizes.map(String), [{name: '販売構成比', color: 'var(--s-2026)', values: sales}, {name: '在庫構成比', color: 'var(--s-2025)', values: stock}], {percent: true, extra: i => `販売 ${fmt(salesBySize[sizes[i]] || 0)}足 / 在庫 ${fmt(stockBySize[sizes[i]] || 0)}足`});
+    const thin = sizes.filter((sz, i) => sales[i] - stock[i] >= 0.03).map((sz, _, __) => sz);
+    if (thin.length) notes.push(`${GENDER_JA[g]}: サイズ <b>${thin.join(' / ')}</b> は販売構成比に対して在庫構成比が3pt以上低い(在庫が薄い)`);
+  });
+  $('sizeMixNote').innerHTML = notes.join('<br>') || '販売構成比と在庫構成比に3pt以上の差があるサイズはありません。';
+  // color mix within a model
+  const ms = $('mixModelSel');
+  if (!S.mixModel || !R.models.find(g => g.model === S.mixModel)) S.mixModel = R.models[0].model;
+  ms.innerHTML = R.models.map(g => `<option value="${esc(g.model)}" ${g.model === S.mixModel ? 'selected' : ''}>${esc(g.model)}</option>`).join('');
+  const g = R.models.find(x => x.model === S.mixModel);
+  const items = g.items.slice().sort((a, b) => b.s2026 - a.s2026);
+  const sT = items.reduce((a, it) => a + it.s2026, 0) || 1, kT = items.reduce((a, it) => a + it.stock, 0) || 1;
+  const oneGender = new Set(items.map(it => it.gender)).size === 1;
+  const short = it => { const l = oneGender ? it.color : `${it.gender} ${it.color}`; return l.length > 14 ? l.slice(0, 13) + '…' : l; };
+  groupedBars('colorMixChart', items.map(short), [{name: '販売構成比', color: 'var(--s-2026)', values: items.map(it => it.s2026 / sT)}, {name: '在庫構成比', color: 'var(--s-2025)', values: items.map(it => it.stock / kT)}], {w: 1080, h: 280, percent: true, extra: i => `${esc(items[i].gender)} ${esc(items[i].color)}<br>2026年販売 ${fmt(items[i].s2026)}足 / 在庫 ${fmt(items[i].stock)}足 / 在庫月数 ${coverText(items[i].cover, items[i].v, items[i].stock)}`});
+  $('colorMixTable').innerHTML = `<div class="tbl-wrap" style="max-height:none"><table class="tbl"><thead><tr><th class="l">アイテム</th><th>2026年販売</th><th>販売構成比</th><th>在庫</th><th>在庫構成比</th><th>入荷予定</th><th>ペース/月</th><th>在庫月数</th><th class="l">ステータス</th></tr></thead><tbody>${items.map(it => `<tr><td class="l">${esc(it.gender)} ${esc(it.color)}</td><td class="num">${fmt(it.s2026)}</td><td class="num">${pct(it.s2026 / sT)}</td><td class="num">${fmt(it.stock)}</td><td class="num">${pct(it.stock / kT)}</td><td class="num">${it.on_order ? '+' + fmt(it.on_order) : ''}</td><td class="num">${fmt1(it.v)}</td><td class="num">${coverText(it.cover, it.v, it.stock)}</td><td class="l">${badge(it.status)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function renderAbout() {
+  const rec = D.reconciliation.slice().sort((a, b) => b.json_2026 - a.json_2026);
+  $('aboutCard').innerHTML = `
+    <h2>このデータについて</h2>
+    <h3>ソース</h3>
+    <ul>
+      <li><b>在庫</b>: <code>${esc(STOCK.source_file)}</code>(${AS_OF} 時点、シート「Net (2)」)。Balance 列(輸入累計 − 販売累計)を在庫として使用。Office 列(実棚)は2026年7月入荷分が未記入のため使っていません。店舗別在庫列は空欄でした。</li>
+      <li><b>販売実績</b>: <code>${esc(SALES.source_repo)}</code> ブランチ <code>${esc(SALES.source_branch)}</code>(commit <code>${esc((SALES.source_commit || '').slice(0, 7))}</code>)の <code>data/dashboard_data.json</code> → <code>vff_shoes.model_monthly / gender_size_monthly / store_monthly</code>。この数値を販売実績の正としています。</li>
+    </ul>
+    <h3>計算方法</h3>
+    <ul>
+      <li><b>モデル別の月間販売ペース</b> = 販売実績JSONのモデル別月次足数を、選択した期間(直近3ヶ月 / 6ヶ月 / 2026年1〜8月)で平均。</li>
+      <li><b>6月の輸出除外</b>: 2026-06 には Export チャネルで ${fmt(D.export_total)}足の一括輸出が含まれます。在庫表の2026年販売列には輸出が含まれないため、両者の差(50足以上のモデルのみ)を輸出分として推定し、チェックONのとき6月から差し引きます。推定: ${Object.entries(D.export_adjust).map(([m, q]) => `${esc(m)} ${fmt(q)}足`).join('、')}(計 ${fmt(Object.values(D.export_adjust).reduce((a, b) => a + b, 0))}足)。</li>
+      <li><b>SKU(サイズ・カラー)への配分</b>: 在庫表のSKU別「2026年販売」÷ 2026年の販売可能月数(初入荷月から8月まで)を重みとし、モデルのペースを重み比で配分。JSONにはモデル×カラー×サイズの同時集計が無いためこの方式です。新色は販売可能月数が短い分、重みが補正されます。</li>
+      <li><b>在庫月数</b> = 在庫 ÷ ペース。<b>ステータス</b>: 欠品中(在庫0でペースあり)/ 要発注(在庫月数 &lt; リードタイム)/ 注意(&lt; リードタイム+2ヶ月)/ 適正 / 過剰(&gt; 12ヶ月)/ 滞留(2026年販売なし)/ 入荷待ち(在庫0・発注済み)。アイテム全体は足りても売れるサイズ(0.5足/月以上)が欠品・要発注なら「サイズ欠け」。</li>
+      <li><b>推移予測</b>: 月末在庫 = 前月末在庫 − ペース(在庫0で打ち止め)。入荷予定(在庫表の Order Import 列、計 ${fmt(R.total.on_order)}足)は到着月を指定したときだけ、その月の頭に加算します。</li>
+    </ul>
+    <h3>在庫表とJSONの突合(2026年1〜8月・モデル別足数)</h3>
+    <div class="tbl-wrap" style="max-height:none"><table class="tbl"><thead><tr><th class="l">モデル(JSON名)</th><th>在庫表 2026</th><th>JSON 2026</th><th>差(JSON−在庫表)</th><th>JSON 6月</th><th>輸出推定</th></tr></thead><tbody>${rec.map(r => `<tr><td class="l">${esc(r.model)}</td><td class="num">${fmt(r.excel_2026)}</td><td class="num">${fmt(r.json_2026)}</td><td class="num">${r.gap > 0 ? '+' : ''}${fmt(r.gap)}</td><td class="num">${fmt(r.june)}</td><td class="num">${r.export_est ? fmt(r.export_est) : ''}</td></tr>`).join('')}<tr style="font-weight:700"><td class="l">合計</td><td class="num">${fmt(rec.reduce((a, r) => a + r.excel_2026, 0))}</td><td class="num">${fmt(rec.reduce((a, r) => a + r.json_2026, 0))}</td><td class="num">${fmt(rec.reduce((a, r) => a + r.gap, 0))}</td><td class="num">${fmt(rec.reduce((a, r) => a + r.june, 0))}</td><td class="num">${fmt(rec.reduce((a, r) => a + r.export_est, 0))}</td></tr></tbody></table></div>
+    <p class="muted" style="margin-top:8px">差が小さいモデルの±数十足は、計上タイミング(委託・百貨店の締め)の違いと見ています。在庫表の合計(在庫 ${fmt(STOCK.excel_total_row.balance)}足・入荷予定 ${fmt(STOCK.excel_total_row.order_import)}足・2026年販売 ${fmt(STOCK.excel_total_row.s2026)}足)はシートの TOTAL 行と一致することを確認済みです。</p>
+    <h3>販売実績はあるが在庫表に無いモデル(2026年1〜8月)</h3>
+    <p>${D.sold_without_stock.map(x => `${esc(x.model)} ${fmt(x.qty_2026)}足`).join('、')}。旧モデル・Furoshiki・委託先在庫からの販売とみられ、本ダッシュボードの対象外です。</p>
+    <h3>既知の制約</h3>
+    <ul>
+      <li>在庫は倉庫・店舗を合算した会社全体の数で、店舗別の在庫配分は分かりません。</li>
+      <li>ペースは過去実績の平均で、季節性・イベント・値引きは織り込んでいません。2025年同月の実績を「在庫推移予測」タブで並べて確認できます。</li>
+      <li>Trailope WP は Trailope、Groundsplay LS は Groundsplay のペースを配分元にしています(JSON側で区別がないため)。Scramkey はユニセックス表記(サイズに M/W 無し)。</li>
+      <li>入荷予定の到着月は在庫表に無いため、画面上で仮置きする方式です。</li>
+    </ul>
+    <h3>更新手順</h3>
+    <ol>
+      <li>月末の在庫表 xlsx を <code>python scripts/extract_stock.py "&lt;xlsx&gt;"</code> で <code>data/stock.json</code> に変換</li>
+      <li>販売ダッシュボードの <code>data/dashboard_data.json</code> を <code>python scripts/fetch_sales.py &lt;path&gt; &lt;commit&gt;</code> で取り込み</li>
+      <li><code>python scripts/build.py</code> で <code>index.html</code> を生成し、GitHub の main に push(Vercel が自動デプロイ)</li>
+    </ol>`;
+}
+
+// ---------- wiring ----------
+function renderAll() {
+  compute();
+  renderSummary(); renderAlerts(); renderForecast(); renderMix(); renderAbout();
+  document.querySelectorAll('#basisSeg button').forEach(b => b.classList.toggle('active', b.dataset.v === S.basis));
+}
+function switchTab(name) { S.tab = name; document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name)); document.querySelectorAll('.tabpanel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name)); window.scrollTo({top: 0}); }
+document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+document.querySelectorAll('#basisSeg button').forEach(b => b.onclick = () => { S.basis = b.dataset.v; renderAll(); });
+$('exportChk').onchange = e => { S.exportAdj = e.target.checked; renderAll(); };
+$('leadSel').onchange = e => { S.lead = +e.target.value; renderAll(); };
+$('arrivalSel').onchange = e => { S.arrival = e.target.value; renderAll(); };
+$('modelFilter').onchange = e => { S.alertModel = e.target.value; renderAlerts(); };
+$('genderFilter').onchange = e => { S.alertGender = e.target.value; renderAlerts(); };
+$('sortSel').onchange = e => { S.alertSort = e.target.value; renderAlerts(); };
+$('viewCards').onclick = () => { S.alertView = 'cards'; renderAlerts(); };
+$('viewTable').onclick = () => { S.alertView = 'table'; renderAlerts(); };
+$('csvBtn').onclick = exportCsv;
+$('itemSel').onchange = e => { S.item = e.target.value; renderForecast(); };
+$('mixModelSel').onchange = e => { S.mixModel = e.target.value; renderMix(); };
+document.body.addEventListener('click', e => {
+  const go = e.target.closest('[data-goto]'); if (go) { switchTab(go.dataset.goto); return; }
+  const fc = e.target.closest('[data-forecast]'); if (fc) { S.item = fc.dataset.forecast; renderForecast(); switchTab('forecast'); return; }
+  const tg = e.target.closest('[data-toggle]'); if (tg) { const el = $(tg.dataset.toggle); el.classList.toggle('hidden'); tg.textContent = el.classList.contains('hidden') ? '表を表示' : '表を隠す'; }
+});
+renderPeriod();
+renderAll();
+})();
+</script>
+</body>
+</html>

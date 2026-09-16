@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+# Raw stock workbook (contains import invoice numbers) stays out of the repo;
+# the extracted data/stock.json is what gets committed.
+*.xlsx
+.vercel/

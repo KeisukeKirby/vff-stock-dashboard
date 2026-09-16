@@ -184,11 +184,8 @@ const mLab = m => `${+m.slice(5)}月`;
 const badge = k => `<span class="badge st-${k}"><span class="dot"></span>${STATUS[k].label}</span>`;
 const coverText = s => s.avg > 0 ? (s.stock <= 0 ? '0' : s.cover >= 36 ? '36+' : fmt1(s.cover)) : (s.stock > 0 ? '—' : '0');
 
-// ---- model-level recent pace from the sales JSON (June export estimate removed) ----
-function modelQty(sm, m) { const q = (SALES.model_monthly_qty[sm] || {})[m] || 0; return m === D.export_month ? Math.max(0, q - (D.export_adjust[sm] || 0)) : q; }
-const recentAvgOf = sm => SALES.model_monthly_qty[sm] ? RECENT.reduce((a, m) => a + modelQty(sm, m), 0) / RECENT.length : 0;
-
-// ---- per-SKU figures ----
+// ---- per-SKU figures: monthly qty comes from the sales ETL records (domestic, Export store excluded) ----
+const modelKey = sm => Object.keys(SALES.model_monthly_qty).find(k => k.toUpperCase() === (sm || '').toUpperCase());
 function monthsOnSale(s) { if (!s.first_import) return 0; if (s.first_import < MONTHS[0]) return MONTHS.length; const i = MONTHS.indexOf(s.first_import); return i < 0 ? 0 : MONTHS.length - i; }
 function statusOf(x) {
   if (x.stock <= 0) return x.avg > 0 ? 'out' : (x.on_order > 0 ? 'incoming' : 'none');
@@ -198,24 +195,26 @@ function statusOf(x) {
   return 'ok';
 }
 function compute() {
-  const salesBySm = {}; SK.forEach(s => { if (s.sales_model) salesBySm[s.sales_model] = (salesBySm[s.sales_model] || 0) + s.s2026; });
   SK.forEach(s => {
-    s.months = monthsOnSale(s); s.avg = s.months > 0 ? s.s2026 / s.months : 0;
+    s.sold2026 = MONTHS.reduce((a, m) => a + (s.monthly[m] || 0), 0);
+    s.months = monthsOnSale(s);
+    // a SKU can have sales recorded before its first import month in the stock sheet (pre-orders): count from the first sale then
+    const firstSale = MONTHS.find(m => (s.monthly[m] || 0) > 0);
+    if (firstSale) s.months = Math.max(s.months, MONTHS.length - MONTHS.indexOf(firstSale));
+    s.avg = s.months > 0 ? s.sold2026 / s.months : 0;
+    s.recent = RECENT.reduce((a, m) => a + (s.monthly[m] || 0), 0) / RECENT.length;
     s.cover = s.avg > 0 ? s.stock / s.avg : (s.stock > 0 ? Infinity : 0); s.status = statusOf(s);
-    // 直近3ヶ月(推定) = model's recent monthly average x this SKU's share of the model's 2026 sales
-    s.recent = (s.sales_model && salesBySm[s.sales_model] > 0) ? recentAvgOf(s.sales_model) * s.s2026 / salesBySm[s.sales_model] : 0;
   });
   const map = new Map();
-  SK.forEach(s => { let g = map.get(s.model); if (!g) { g = {model: s.model, sales_model: s.sales_model, stock: 0, on_order: 0, s2026: 0, avg: 0, recent: 0, skus: 0}; map.set(s.model, g); } g.stock += s.stock; g.on_order += s.on_order; g.s2026 += s.s2026; g.avg += s.avg; g.recent += s.recent; g.skus++; });
+  SK.forEach(s => { let g = map.get(s.model); if (!g) { g = {model: s.model, sales_model: s.sales_model, stock: 0, on_order: 0, s2026: 0, sold2026: 0, avg: 0, recent: 0, skus: 0}; map.set(s.model, g); } g.stock += s.stock; g.on_order += s.on_order; g.s2026 += s.s2026; g.sold2026 += s.sold2026; g.avg += s.avg; g.recent += s.recent; g.skus++; });
   const models = [...map.values()].sort((a, b) => a.model.localeCompare(b.model));
   const seen = new Set();
   models.forEach(g => {
     g.cover = g.avg > 0 ? g.stock / g.avg : (g.stock > 0 ? Infinity : 0); g.status = statusOf(g);
-    const mq = g.sales_model ? SALES.model_monthly_qty[g.sales_model] : null;
-    g.primary = !!mq && !seen.has(g.sales_model); if (mq) seen.add(g.sales_model);
-    g.raw = mq ? MONTHS.map(m => mq[m] || 0) : null;
-    g.export = mq ? (D.export_adjust[g.sales_model] || 0) : 0;
-    g.recentModel = mq ? recentAvgOf(g.sales_model) : null;
+    const mk = modelKey(g.sales_model), mq = mk ? SALES.model_monthly_qty[mk] : null;
+    g.primary = !!mq && !seen.has(mk); if (mq) seen.add(mk);
+    g.raw = mq ? MONTHS.map(m => mq[m] || 0) : null;           // model total incl. the Export store
+    g.export = mk ? (D.export_by_model[mk] || 0) : 0;
   });
   return models;
 }
@@ -224,8 +223,8 @@ function compute() {
 const COLS = [
   {k: 'model', l: 'モデル', left: true}, {k: 'color', l: 'カラー', left: true}, {k: 'size_num', l: 'サイズ', left: true, r: s => esc(s.size)}, {k: 'gender', l: '性別', left: true},
   {k: 'stock', l: '在庫数', r: s => fmt(s.stock)},
-  {k: 'avg', l: '今年の月平均<br><span class="muted">2026年1〜8月</span>', r: s => fmt1(s.avg)},
-  {k: 'recent', l: `直近3ヶ月の月平均<br><span class="muted">推定</span>`, r: s => s.sales_model ? fmt1(s.recent) : '<span class="dim">—</span>'},
+  {k: 'avg', l: `今年の月平均<br><span class="muted">${+MONTHS[0].slice(5)}〜${+MONTHS[MONTHS.length - 1].slice(5)}月</span>`, r: s => fmt1(s.avg)},
+  {k: 'recent', l: `直近3ヶ月の月平均<br><span class="muted">${+RECENT[0].slice(5)}〜${+RECENT[RECENT.length - 1].slice(5)}月</span>`, r: s => fmt1(s.recent)},
   {k: 'cover', l: '在庫月数', r: s => coverText(s)},
   {k: 'status', l: 'ステータス', left: true, r: s => badge(s.status)},
 ];
@@ -248,8 +247,8 @@ function renderList(models) {
   $('skuTable').querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; if (S.sort === k) { if (S.dir === firstDir(k)) S.dir = -S.dir; else { S.sort = null; S.dir = 1; } } else { S.sort = k; S.dir = firstDir(k); } renderList(models); });
 }
 function exportCsv() {
-  const head = ['モデル', 'カラー', 'サイズ', '性別', '在庫数', '今年の月平均', '直近3ヶ月の月平均(推定)', '在庫月数', 'ステータス', '入荷予定', '2026年販売', '販売月数', '初入荷', '2025年販売', '2024年販売'];
-  const rows = SK.slice().sort(defaultSort).map(s => [s.model, s.color, s.size, s.gender, s.stock, s.avg.toFixed(2), s.recent.toFixed(2), s.avg > 0 ? (s.cover >= 99 ? '99+' : s.cover.toFixed(1)) : (s.stock > 0 ? 'inf' : '0'), STATUS[s.status].label, s.on_order, s.s2026, s.months, s.first_import || '', s.s2025, s.s2024]);
+  const head = ['モデル', 'カラー', 'サイズ', '性別', '在庫数', '今年の月平均', '直近3ヶ月の月平均', '在庫月数', 'ステータス', '入荷予定', '2026年販売(実績)', '販売月数', '初入荷', ...MONTHS.map(m => m + ' 販売'), '2026年販売(在庫表)', '2025年販売(在庫表)'];
+  const rows = SK.slice().sort(defaultSort).map(s => [s.model, s.color, s.size, s.gender, s.stock, s.avg.toFixed(2), s.recent.toFixed(2), s.avg > 0 ? (s.cover >= 99 ? '99+' : s.cover.toFixed(1)) : (s.stock > 0 ? 'inf' : '0'), STATUS[s.status].label, s.on_order, s.sold2026, s.months, s.first_import || '', ...MONTHS.map(m => s.monthly[m] || 0), s.s2026, s.s2025]);
   const csv = '﻿' + [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'})); a.download = `vff_stock_${D.as_of}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -260,7 +259,7 @@ function renderDetail(models) {
   const cnt = k => SK.filter(s => s.status === k).length;
   $('kpis').innerHTML = `
     <div class="kpi"><div class="kpi-label">総在庫(${D.as_of})</div><div class="kpi-value">${fmt(stock)}<small>足</small></div><div class="kpi-sub">${SK.length} SKU · ${models.length} モデル · 入荷予定 +${fmt(onOrder)}</div></div>
-    <div class="kpi"><div class="kpi-label">今年の月平均販売</div><div class="kpi-value">${fmt(avg)}<small>足/月</small></div><div class="kpi-sub">2026年1〜8月 計 ${fmt(SK.reduce((a, s) => a + s.s2026, 0))}足(在庫表)· 直近3ヶ月 ${fmt(recent)}足/月</div></div>
+    <div class="kpi"><div class="kpi-label">今年の月平均販売</div><div class="kpi-value">${fmt(avg)}<small>足/月</small></div><div class="kpi-sub">2026年1〜8月 計 ${fmt(SK.reduce((a, s) => a + s.sold2026, 0))}足(国内・SKU照合分)· 直近3ヶ月 ${fmt(recent)}足/月</div></div>
     <div class="kpi"><div class="kpi-label">在庫月数(全体)</div><div class="kpi-value">${fmt1(stock / avg)}<small>ヶ月</small></div><div class="kpi-sub">在庫 ÷ 今年の月平均</div></div>
     <div class="kpi out"><div class="kpi-label">欠品中</div><div class="kpi-value">${cnt('out')}<small>SKU</small></div><div class="kpi-sub">在庫0で今年販売あり</div></div>
     <div class="kpi order"><div class="kpi-label">要発注</div><div class="kpi-value">${cnt('order')}<small>SKU</small></div><div class="kpi-sub">在庫月数 ${S.lead}ヶ月未満</div></div>
@@ -268,8 +267,8 @@ function renderDetail(models) {
   $('legend').innerHTML = Object.keys(STATUS).map(k => `<span><span class="sw" style="background:${STATUS[k].color}"></span>${STATUS[k].label} <span class="muted">— ${STATUS[k].desc.replace('リードタイム', `リードタイム(${S.lead}ヶ月)`)}</span></span>`).join('');
   $('defs').innerHTML = [
     ['在庫数', '在庫表の Balance 列(輸入累計 − 販売累計)'],
-    ['今年の月平均', 'SKU の 2026年販売(在庫表)÷ 販売月数。初入荷が2026年なら入荷月〜8月、それ以前なら 8ヶ月'],
-    ['直近3ヶ月の月平均(推定)', `モデルの直近3ヶ月(${RECENT.map(mLab).join('・')})の月平均(販売実績JSON、6月の輸出推定分を除く)× モデル内でのその SKU の 2026年販売構成比`],
+    ['今年の月平均', `SKU の 2026年${+MONTHS[0].slice(5)}〜${+MONTHS[MONTHS.length - 1].slice(5)}月の販売足数(販売実績の明細を SKU 単位で集計、輸出を除く)÷ 販売月数。初入荷(または初販売)が2026年ならその月〜${+MONTHS[MONTHS.length - 1].slice(5)}月、それ以前なら ${MONTHS.length}ヶ月`],
+    ['直近3ヶ月の月平均', `SKU の ${RECENT.map(mLab).join('・')}の販売足数 ÷ 3(同じ明細から。輸出を除く)`],
     ['在庫月数', '在庫数 ÷ 今年の月平均'],
     ['入荷予定', '在庫表の Order Import 列(発注済み・未入荷)。到着月は在庫表に無い'],
     ['ステータス', `欠品中 → 要発注(< ${S.lead}ヶ月)→ 適正 → 在庫過剰(> 12ヶ月)。販売0は 動きなし / 入荷待ち / 在庫なし`],
@@ -277,27 +276,32 @@ function renderDetail(models) {
 
   const maxStock = Math.max(...models.map(g => g.stock), 1);
   const tot = {stock: 0, on_order: 0, s2026: 0, avg: 0, recent: 0, raw: MONTHS.map(() => 0), export: 0};
-  models.forEach(g => { tot.stock += g.stock; tot.on_order += g.on_order; tot.s2026 += g.s2026; tot.avg += g.avg; tot.recent += g.recent; if (g.primary) { g.raw.forEach((v, i) => tot.raw[i] += v); tot.export += g.export; } });
+  models.forEach(g => { tot.stock += g.stock; tot.on_order += g.on_order; tot.s2026 += g.s2026; tot.sold2026 = (tot.sold2026 || 0) + g.sold2026; tot.avg += g.avg; tot.recent += g.recent; if (g.primary) { g.raw.forEach((v, i) => tot.raw[i] += v); tot.export += g.export; } });
   const recentIdx = RECENT.map(m => MONTHS.indexOf(m));
   const cell = (v, i) => `<td class="num ${recentIdx.includes(i) ? '' : 'dim'}">${fmt(v)}</td>`;
   $('modelTable').innerHTML = `<table class="tbl"><thead><tr>
-      <th class="l">モデル</th><th>在庫</th><th>入荷予定</th><th>2026年販売<br><span class="muted">在庫表</span></th><th>今年の<br>月平均</th><th>直近3ヶ月<br><span class="muted">月平均</span></th><th>在庫月数</th><th class="l">ステータス</th>
-      ${MONTHS.map(m => `<th>${mLab(m)}</th>`).join('')}<th>2026年計<br><span class="muted">実績JSON</span></th>
+      <th class="l">モデル</th><th>在庫</th><th>入荷予定</th><th>2026年販売<br><span class="muted">SKU照合分</span></th><th>今年の<br>月平均</th><th>直近3ヶ月<br><span class="muted">月平均</span></th><th>在庫月数</th><th class="l">ステータス</th>
+      ${MONTHS.map(m => `<th>${mLab(m)}</th>`).join('')}<th>2026年計<br><span class="muted">モデル全体</span></th><th>2026年販売<br><span class="muted">在庫表</span></th>
     </tr></thead><tbody>${models.map(g => `<tr>
       <td class="l"><span class="bar" style="width:${Math.max(2, g.stock / maxStock * 80)}px"></span>${esc(g.model)}</td>
-      <td class="num">${fmt(g.stock)}</td><td class="num dim">${g.on_order ? '+' + fmt(g.on_order) : ''}</td><td class="num">${fmt(g.s2026)}</td><td class="num">${fmt1(g.avg)}</td><td class="num">${fmt1(g.recent)}</td><td class="num">${coverText(g)}</td><td class="l">${badge(g.status)}</td>
-      ${g.primary ? g.raw.map(cell).join('') + `<td class="num">${fmt(g.raw.reduce((a, b) => a + b, 0))}${g.export ? `<span class="muted"> (6月に輸出 ${fmt(g.export)})</span>` : ''}</td>`
-                  : `<td class="dim l" colspan="${MONTHS.length + 1}">${g.sales_model ? `${esc(g.sales_model.replace(/^VFF /, ''))} に含まれる` : '実績JSONに該当なし'}</td>`}
-    </tr>`).join('')}<tr class="total"><td class="l">合計</td><td class="num">${fmt(tot.stock)}</td><td class="num">+${fmt(tot.on_order)}</td><td class="num">${fmt(tot.s2026)}</td><td class="num">${fmt1(tot.avg)}</td><td class="num">${fmt1(tot.recent)}</td><td class="num">${fmt1(tot.stock / tot.avg)}</td><td></td>${tot.raw.map(cell).join('')}<td class="num">${fmt(tot.raw.reduce((a, b) => a + b, 0))}</td></tr></tbody></table>`;
-  $('modelNote').innerHTML = `月別の列は販売実績JSONそのまま(明るい列 = 直近3ヶ月)。<b>${+D.export_month.slice(5)}月には一括輸出 ${fmt(D.export_total)}足</b>が含まれ、在庫表の販売列には無いため、直近3ヶ月の月平均ではモデル別の推定分(計 ${fmt(tot.export)}足)を除いています。`;
+      <td class="num">${fmt(g.stock)}</td><td class="num dim">${g.on_order ? '+' + fmt(g.on_order) : ''}</td><td class="num">${fmt(g.sold2026)}</td><td class="num">${fmt1(g.avg)}</td><td class="num">${fmt1(g.recent)}</td><td class="num">${coverText(g)}</td><td class="l">${badge(g.status)}</td>
+      ${g.primary ? g.raw.map(cell).join('') + `<td class="num">${fmt(g.raw.reduce((a, b) => a + b, 0))}${g.export ? `<span class="muted"> (うち輸出 ${fmt(g.export)})</span>` : ''}</td>`
+                  : `<td class="dim l" colspan="${MONTHS.length + 1}">${g.sales_model ? `${esc(g.sales_model.replace(/^VFF /, ''))} に含まれる` : '販売実績に該当なし'}</td>`}
+      <td class="num dim">${fmt(g.s2026)}</td>
+    </tr>`).join('')}<tr class="total"><td class="l">合計</td><td class="num">${fmt(tot.stock)}</td><td class="num">+${fmt(tot.on_order)}</td><td class="num">${fmt(tot.sold2026)}</td><td class="num">${fmt1(tot.avg)}</td><td class="num">${fmt1(tot.recent)}</td><td class="num">${fmt1(tot.stock / tot.avg)}</td><td></td>${tot.raw.map(cell).join('')}<td class="num">${fmt(tot.raw.reduce((a, b) => a + b, 0))}</td><td class="num dim">${fmt(tot.s2026)}</td></tr></tbody></table>`;
+  $('modelNote').innerHTML = `月別の列はモデル全体(全カラー・全サイズ、旧カラー含む)の販売足数で、明るい列 = 直近3ヶ月。<b>${+D.export_month.slice(5)}月には一括輸出 ${fmt(D.export_total)}足</b>(${Object.entries(D.export_by_model).map(([m, q]) => `${esc(m.replace(/^VFF /, ''))} ${fmt(q)}`).join(' / ')})が含まれますが、SKU 別の数字(今年の月平均・直近3ヶ月)からは除いています。「2026年販売 在庫表」は在庫表の販売列(参考)。`;
 
+  const rec = D.reconciliation;
   $('dataNote').innerHTML = `<ul>
     <li><b>在庫</b>: <code>${esc(D.source_file)}</code>(${D.as_of} 時点、シート Net (2))。Office 列(実棚)は7月入荷分が未記入のため未使用。店舗別在庫列は空欄で、店舗別の内訳は出せない。</li>
-    <li><b>販売実績</b>: sales-1st-half-26-dashboard(${esc(SALES.source_repo)}@${esc((SALES.source_commit || '').slice(0, 7))})の <code>vff_shoes.model_monthly</code>。モデル単位の月次のみで、SKU別の月次は無い。そのため SKU 行の販売数は在庫表の2026年累計、直近3ヶ月は構成比による推定。</li>
-    <li>Trailope WP は Trailope、Groundsplay LS は Groundsplay として実績JSONに含まれる。Scramkey はサイズ表記に M/W が無くユニセックス(U)扱い。</li>
-    <li>実績JSONに販売はあるが在庫表に無いモデル(旧モデル・Furoshiki など)は対象外。</li>
-    <li>更新: 月末の在庫表 → <code>extract_stock.py</code>、販売JSON → <code>fetch_sales.py</code>、<code>build.py</code> で生成して main に push(Vercel が自動デプロイ)。</li>
-  </ul>`;
+    <li><b>販売実績</b>: 販売実績ダッシュボード(${esc(SALES.source_repo)})の ETL スクリプトをこのPCで同じ生データ(店舗・EC・委託・百貨店の明細 Excel)に対して実行し、VFF シューズを SKU(モデル×性別×カラー×サイズ)× 月で集計。除外店舗も同じ(${SALES.excluded_stores.map(esc).join('、')})。7月は「7〜8月ファイル」を正とし、7月単月ファイルとの二重計上を避けている。</li>
+    <li><b>SKU 照合</b>: 明細のカラー・サイズ表記を在庫表と突き合わせ。在庫表にあるモデルで照合できなかった販売は ${fmt(D.unmatched_stocked_qty)}足(在庫表に無い旧カラー: ${D.unmatched_stocked.slice(0, 6).map(u => `${esc(u.model.replace(/^VFF /, ''))} ${esc(u.gender)} ${esc(String(u.color))}`).filter((v, i, a) => a.indexOf(v) === i).join('、')} など)。在庫表に無いモデル(Furoshiki、CVT-Hemp、V-Trail 2.0 など旧モデル)の ${fmt(D.unmatched_other_qty)}足は対象外。</li>
+    <li>Trailope WP は Trailope、Groundsplay LS は Groundsplay の一部として明細に現れる(カラーで区別)。Scramkey はサイズ表記に M/W が無くユニセックス(U)扱い。</li>
+    <li>更新: 月末の在庫表 → <code>extract_stock.py</code>、生データ → <code>stage_raw_sales.py</code> → <code>sales_etl/*.py</code> → <code>sku_sales.py</code>、<code>build.py</code> で生成して main に push(Vercel が自動デプロイ)。</li>
+  </ul>
+  <div style="font-size:13px;font-weight:600;margin:14px 0 6px">販売実績ダッシュボード(公開JSON)との突合 — モデル別 2026年1〜8月 足数</div>
+  <div class="tbl-wrap" style="max-height:none"><table class="tbl"><thead><tr><th class="l">モデル</th><th>このページ(ローカルETL)</th><th>販売ダッシュボード</th><th>差</th></tr></thead><tbody>${rec.map(r => `<tr><td class="l">${esc(r.model)}</td><td class="num">${fmt(r.local)}</td><td class="num">${fmt(r.json)}</td><td class="num ${r.local - r.json ? '' : 'dim'}">${r.local - r.json > 0 ? '+' : ''}${fmt(r.local - r.json)}</td></tr>`).join('')}<tr class="total"><td class="l">合計</td><td class="num">${fmt(rec.reduce((a, r) => a + r.local, 0))}</td><td class="num">${fmt(rec.reduce((a, r) => a + r.json, 0))}</td><td class="num">${fmt(rec.reduce((a, r) => a + r.local - r.json, 0))}</td></tr></tbody></table></div>
+  <div class="note">店舗×月ではイベントの5月(+3足)以外すべて一致。モデル別の±数足は、公開JSON側が7月のモデル内訳を売上比で近似していた(JSON 作成時のパッチ)ことによる差で、このページの明細ベースの方が正確。</div>`;
 }
 
 function renderAll() { const models = compute(); renderList(models); renderDetail(models); }

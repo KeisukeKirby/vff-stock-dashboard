@@ -1,9 +1,12 @@
-"""Build index.html: src/template.html + data/stock.json + data/sales_vff.json -> index.html.
+"""Build index.html: src/template.html + data/stock.json + data/sku_sales.json (+ data/sales_vff.json for reconciliation) -> index.html.
 
 Everything the page needs is embedded as one JSON blob (window.DATA), so the
-result is a single self-contained file that Vercel serves statically. Only the
-slice of the sales file the page uses (model-level monthly qty for 2026) is
-embedded, to keep the page small.
+result is a single self-contained file that Vercel serves statically.
+
+Sales figures now come from data/sku_sales.json, i.e. the sales dashboard's own
+ETL scripts run locally (scripts/sales_etl/) and aggregated per SKU x month by
+scripts/sku_sales.py. data/sales_vff.json (the dashboard's published JSON) is
+only used to print/embed a reconciliation of the two.
 
 Usage: python scripts/build.py
 """
@@ -14,44 +17,65 @@ ROOT = os.path.join(HERE, "..")
 p = lambda *a: os.path.join(ROOT, *a)
 
 stock = json.load(open(p("data", "stock.json"), encoding="utf-8"))
+sku_sales = json.load(open(p("data", "sku_sales.json"), encoding="utf-8"))
 sales = json.load(open(p("data", "sales_vff.json"), encoding="utf-8"))
 template = open(p("src", "template.html"), encoding="utf-8").read()
 
-months = [m for m in sales["months"] if m.startswith("2026")]
-mm = sales["vff_shoes"]["model_monthly"]
-used_models = {s["sales_model"] for s in stock["skus"] if s["sales_model"]}
-model_monthly_qty = {m: {mo: int(mm.get(m, {}).get(mo, {}).get("qty", 0) or 0) for mo in months} for m in sorted(used_models)}
-
-# The one-off export that inflates June in the sales file is not in the stock
-# sheet's sales column, so per model the Jan-Aug gap between the two sources
-# is that model's export share. Gaps under 50 pairs are ordinary timing
-# differences and are left alone; the estimate is capped at the June qty.
+months = sku_sales["months"]
 export_month = "2026-06"
-export_total = int(sales["vff_shoes"]["store_monthly"].get("Export", {}).get(export_month, {}).get("qty", 0) or 0)
-excel26 = {}
-for s in stock["skus"]:
-    if s["sales_model"]:
-        excel26[s["sales_model"]] = excel26.get(s["sales_model"], 0) + s["s2026"]
-export_adjust = {}
-for m, xl in excel26.items():
-    gap = sum(model_monthly_qty[m].values()) - xl
-    if gap >= 50:
-        export_adjust[m] = min(gap, model_monthly_qty[m][export_month])
-print("export estimate per model:", export_adjust, "total", sum(export_adjust.values()), "/ sales file", export_total)
+export_by_model = {m: q for m, q in sku_sales["export_by_model"].items() if q}
+export_total = sum(export_by_model.values())
 
+# ---- reconciliation: local ETL run vs the published sales JSON (model-level 2026 qty) ----
+mm_json = sales["vff_shoes"]["model_monthly"]
+local_mm = sku_sales["model_monthly"]
+def upper_key(d):
+    out = {}
+    for k, v in d.items():
+        out[k.upper()] = out.get(k.upper(), 0) + v
+    return out
+loc_tot = upper_key({m: sum(v.values()) for m, v in local_mm.items()})
+js_tot = upper_key({m: sum(int(x.get("qty", 0) or 0) for mo, x in v.items() if mo.startswith("2026")) for m, v in mm_json.items()})
+recon = []
+for k in sorted(set(loc_tot) | set(js_tot), key=lambda k: -max(loc_tot.get(k, 0), js_tot.get(k, 0))):
+    if max(loc_tot.get(k, 0), js_tot.get(k, 0)) > 0:
+        recon.append(dict(model=k.title().replace("Vff ", "VFF ").replace("Kso", "KSO").replace("Kmd", "KMD").replace("El-X", "EL-X").replace("Cvt", "CVT"),
+                          local=round(loc_tot.get(k, 0)), json=js_tot.get(k, 0)))
+print(f"{'model':24s} {'local':>6s} {'json':>6s} {'diff':>5s}")
+for r in recon:
+    print(f"{r['model']:24s} {r['local']:6d} {r['json']:6d} {r['local'] - r['json']:5d}")
+print(f"export {export_month}: {export_by_model} total {export_total}")
+print(f"matched to stock SKUs: {sku_sales['matched_qty']} pairs, unmatched: {sku_sales['unmatched_qty']}")
+
+# per-SKU monthly (domestic, from the ETL records) attached to each stock row
+by_row = sku_sales["skus"]
 SKU_FIELDS = ["row", "item", "model", "gender", "color", "size", "size_num", "sales_model",
               "stock", "on_order", "s2026", "s2025", "s2024", "first_import"]
+skus = []
+for s in stock["skus"]:
+    d = {k: s[k] for k in SKU_FIELDS}
+    d["monthly"] = by_row.get(str(s["row"]), {})
+    skus.append(d)
+
+stocked = {s["sales_model"].upper() for s in stock["skus"] if s["sales_model"]}
+unmatched_stocked = [u for u in sku_sales["unmatched"] if u["model"].upper() in stocked]
+
 data = dict(
     built_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
     as_of=stock["as_of"], source_file=stock["source_file"],
-    skus=[{k: s[k] for k in SKU_FIELDS} for s in stock["skus"]],
+    skus=skus,
     sales=dict(source_repo=sales["source_repo"], source_commit=sales["source_commit"],
-               months=months, recent=months[-3:], model_monthly_qty=model_monthly_qty),
-    export_month=export_month, export_total=export_total, export_adjust=export_adjust,
+               months=months, recent=months[-3:],
+               model_monthly_qty={m: {mo: v.get(mo, 0) for mo in months} for m, v in local_mm.items()},
+               excluded_stores=sku_sales["excluded_stores"]),
+    export_month=export_month, export_total=export_total, export_by_model=export_by_model,
+    reconciliation=recon,
+    unmatched_stocked=unmatched_stocked, unmatched_stocked_qty=round(sum(u["qty"] for u in unmatched_stocked)),
+    unmatched_other_qty=round(sku_sales["unmatched_qty"] - sum(u["qty"] for u in unmatched_stocked)),
 )
 blob = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 html = template.replace("/*__DATA__*/null", blob)
 assert html != template, "template is missing the /*__DATA__*/null placeholder"
 open(p("index.html"), "w", encoding="utf-8").write(html)
-print(f"skus={len(data['skus'])} models_in_sales={len(model_monthly_qty)} months={months[0]}..{months[-1]} export_{export_month}={export_total}")
+print(f"skus={len(skus)} months={months[0]}..{months[-1]}")
 print("wrote index.html", os.path.getsize(p("index.html")) // 1024, "KB")

@@ -1,0 +1,574 @@
+{
+ "shipments": [
+  {
+   "doc_date": "2026-09-02",
+   "etd": "2026-09-12",
+   "po": "CN26015C",
+   "cartons": 104,
+   "pairs": 1248,
+   "lines": [
+    {
+     "style": "Breezandal",
+     "style_no": "25M4301",
+     "gender": "M",
+     "color": "Black",
+     "size": 39,
+     "qty": 9
+    },
+    {
+     "style": "Breezandal",
+     "style_no": "25M4301",
+     "gender": "M",
+     "color": "Black",
+     "size": 40,
+     "qty": 12
+    },
+    {
+     "style": "Breezandal",
+     "style_no": "25M4301",
+     "gender": "M",
+     "color": "Black",
+     "size": 41,
+     "qty": 18
+    },
+    {
+     "style": "Breezandal",
+     "style_no": "25M4301",
+     "gender": "M",
+     "color": "Black",
+     "size": 42,
+     "qty": 33
+    },
+    {
+     "style": "Breezandal",
+     "style_no": "25M4301",
+     "gender": "M",
+     "color": "Black",
+     "size": 43,
+     "qty": 33
+    },
+    {
+     "style": "Breezandal",
+     "style_no": "25M4301",
+     "gender": "M",
+     "color": "Black",
+     "size": 44,
+     "qty": 18
+    },
+    {
+     "style": "Breezandal",
+     "style_no": "25M4301",
+     "gender": "M",
+     "color": "Black",
+     "size": 45,
+     "qty": 18
+    },
+    {
+     "style": "Breezandal",
+     "style_no": "25M4301",
+     "gender": "M",
+     "color": "Black",
+     "size": 46,
+     "qty": 9
+    },
+    {
+     "style": "Breezandal",
+     "style_no": "25M4301",
+     "gender": "M",
+     "color": "Black",
+     "size": 47,
+     "qty": 6
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3201",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 40,
+     "qty": 18
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3201",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 41,
+     "qty": 27
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3201",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 42,
+     "qty": 39
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3201",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 43,
+     "qty": 39
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3201",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 44,
+     "qty": 36
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3201",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 45,
+     "qty": 18
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3201",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 46,
+     "qty": 9
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3201",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 47,
+     "qty": 6
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3202",
+     "gender": "M",
+     "color": "Ivory-Deep Lake",
+     "size": 40,
+     "qty": 27
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3202",
+     "gender": "M",
+     "color": "Ivory-Deep Lake",
+     "size": 41,
+     "qty": 42
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3202",
+     "gender": "M",
+     "color": "Ivory-Deep Lake",
+     "size": 42,
+     "qty": 51
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3202",
+     "gender": "M",
+     "color": "Ivory-Deep Lake",
+     "size": 43,
+     "qty": 48
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3202",
+     "gender": "M",
+     "color": "Ivory-Deep Lake",
+     "size": 44,
+     "qty": 33
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3202",
+     "gender": "M",
+     "color": "Ivory-Deep Lake",
+     "size": 45,
+     "qty": 24
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3202",
+     "gender": "M",
+     "color": "Ivory-Deep Lake",
+     "size": 46,
+     "qty": 12
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3202",
+     "gender": "M",
+     "color": "Ivory-Deep Lake",
+     "size": 47,
+     "qty": 3
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3207",
+     "gender": "M",
+     "color": "Black-Lime",
+     "size": 40,
+     "qty": 9
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3207",
+     "gender": "M",
+     "color": "Black-Lime",
+     "size": 41,
+     "qty": 18
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3207",
+     "gender": "M",
+     "color": "Black-Lime",
+     "size": 42,
+     "qty": 30
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3207",
+     "gender": "M",
+     "color": "Black-Lime",
+     "size": 43,
+     "qty": 30
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3207",
+     "gender": "M",
+     "color": "Black-Lime",
+     "size": 44,
+     "qty": 27
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3207",
+     "gender": "M",
+     "color": "Black-Lime",
+     "size": 45,
+     "qty": 15
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3207",
+     "gender": "M",
+     "color": "Black-Lime",
+     "size": 46,
+     "qty": 9
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26M3207",
+     "gender": "M",
+     "color": "Black-Lime",
+     "size": 47,
+     "qty": 6
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3201",
+     "gender": "W",
+     "color": "Total Black",
+     "size": 36,
+     "qty": 9
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3201",
+     "gender": "W",
+     "color": "Total Black",
+     "size": 37,
+     "qty": 18
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3201",
+     "gender": "W",
+     "color": "Total Black",
+     "size": 38,
+     "qty": 24
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3201",
+     "gender": "W",
+     "color": "Total Black",
+     "size": 39,
+     "qty": 36
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3201",
+     "gender": "W",
+     "color": "Total Black",
+     "size": 40,
+     "qty": 24
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3201",
+     "gender": "W",
+     "color": "Total Black",
+     "size": 41,
+     "qty": 15
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3201",
+     "gender": "W",
+     "color": "Total Black",
+     "size": 42,
+     "qty": 6
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3202",
+     "gender": "W",
+     "color": "Ivory-Deep Lake",
+     "size": 36,
+     "qty": 6
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3202",
+     "gender": "W",
+     "color": "Ivory-Deep Lake",
+     "size": 37,
+     "qty": 12
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3202",
+     "gender": "W",
+     "color": "Ivory-Deep Lake",
+     "size": 38,
+     "qty": 24
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3202",
+     "gender": "W",
+     "color": "Ivory-Deep Lake",
+     "size": 39,
+     "qty": 33
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3202",
+     "gender": "W",
+     "color": "Ivory-Deep Lake",
+     "size": 40,
+     "qty": 24
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3202",
+     "gender": "W",
+     "color": "Ivory-Deep Lake",
+     "size": 41,
+     "qty": 15
+    },
+    {
+     "style": "Groundsplay LS",
+     "style_no": "26W3202",
+     "gender": "W",
+     "color": "Ivory-Deep Lake",
+     "size": 42,
+     "qty": 6
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5002",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 40,
+     "qty": 9
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5002",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 41,
+     "qty": 12
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5002",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 42,
+     "qty": 21
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5002",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 43,
+     "qty": 24
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5002",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 44,
+     "qty": 15
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5002",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 45,
+     "qty": 12
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5002",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 46,
+     "qty": 9
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5002",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 47,
+     "qty": 6
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5001",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 39,
+     "qty": 3
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5001",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 41,
+     "qty": 3
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5001",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 42,
+     "qty": 6
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5001",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 43,
+     "qty": 6
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5001",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 44,
+     "qty": 3
+    },
+    {
+     "style": "Spidrwalk",
+     "style_no": "26M5001",
+     "gender": "M",
+     "color": "Total Black",
+     "size": 45,
+     "qty": 3
+    },
+    {
+     "style": "Trailope WP",
+     "style_no": "26M5701",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 39,
+     "qty": 3
+    },
+    {
+     "style": "Trailope WP",
+     "style_no": "26M5701",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 40,
+     "qty": 9
+    },
+    {
+     "style": "Trailope WP",
+     "style_no": "26M5701",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 41,
+     "qty": 18
+    },
+    {
+     "style": "Trailope WP",
+     "style_no": "26M5701",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 42,
+     "qty": 24
+    },
+    {
+     "style": "Trailope WP",
+     "style_no": "26M5701",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 43,
+     "qty": 30
+    },
+    {
+     "style": "Trailope WP",
+     "style_no": "26M5701",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 44,
+     "qty": 21
+    },
+    {
+     "style": "Trailope WP",
+     "style_no": "26M5701",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 45,
+     "qty": 12
+    },
+    {
+     "style": "Trailope WP",
+     "style_no": "26M5701",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 46,
+     "qty": 9
+    },
+    {
+     "style": "Trailope WP",
+     "style_no": "26M5701",
+     "gender": "M",
+     "color": "Brown/Black",
+     "size": 47,
+     "qty": 6
+    }
+   ],
+   "source_file": "VTC-Thailand Shipment  PO#CN26015C  -total 1248 PRS-Packing List.xls"
+  }
+ ]
+}

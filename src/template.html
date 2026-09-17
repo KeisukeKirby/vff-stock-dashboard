@@ -175,6 +175,8 @@ const STATUS = {
   incoming: {label: '入荷待ち', color: 'var(--st-incoming)', desc: '在庫0・販売0・発注済み(新色/新モデル)'},
   none:     {label: '在庫なし', color: 'var(--ink-faint)',   desc: '在庫0・販売0・発注なし'},
 };
+// '9/12出港' per shipment; PO numbers are listed in the detail tab
+const SHIP_LABEL = (D.shipments || []).map(sh => sh.etd ? `${+sh.etd.slice(5, 7)}/${+sh.etd.slice(8)}出港` : `PO ${sh.po}`).join('・');
 const S = {lead: 3, status: new Set(Object.keys(STATUS).filter(k => k !== 'none')), model: '', gender: '', color: '', sort: null, dir: 1};
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
@@ -188,7 +190,7 @@ const coverText = s => s.avg > 0 ? (s.stock <= 0 ? '0' : s.cover >= 36 ? '36+' :
 const modelKey = sm => Object.keys(SALES.model_monthly_qty).find(k => k.toUpperCase() === (sm || '').toUpperCase());
 function monthsOnSale(s) { if (!s.first_import) return 0; if (s.first_import < MONTHS[0]) return MONTHS.length; const i = MONTHS.indexOf(s.first_import); return i < 0 ? 0 : MONTHS.length - i; }
 function statusOf(x) {
-  if (x.stock <= 0) return x.avg > 0 ? 'out' : (x.on_order > 0 ? 'incoming' : 'none');
+  if (x.stock <= 0) return x.avg > 0 ? 'out' : ((x.incoming || x.on_order) > 0 ? 'incoming' : 'none');
   if (x.avg <= 0) return 'idle';
   if (x.cover < S.lead) return 'order';
   if (x.cover > 12) return 'excess';
@@ -206,7 +208,7 @@ function compute() {
     s.cover = s.avg > 0 ? s.stock / s.avg : (s.stock > 0 ? Infinity : 0); s.status = statusOf(s);
   });
   const map = new Map();
-  SK.forEach(s => { let g = map.get(s.model); if (!g) { g = {model: s.model, sales_model: s.sales_model, stock: 0, on_order: 0, s2026: 0, sold2026: 0, avg: 0, recent: 0, skus: 0}; map.set(s.model, g); } g.stock += s.stock; g.on_order += s.on_order; g.s2026 += s.s2026; g.sold2026 += s.sold2026; g.avg += s.avg; g.recent += s.recent; g.skus++; });
+  SK.forEach(s => { let g = map.get(s.model); if (!g) { g = {model: s.model, sales_model: s.sales_model, stock: 0, incoming: 0, on_order: 0, s2026: 0, sold2026: 0, avg: 0, recent: 0, skus: 0}; map.set(s.model, g); } g.stock += s.stock; g.incoming += s.incoming; g.on_order += s.on_order; g.s2026 += s.s2026; g.sold2026 += s.sold2026; g.avg += s.avg; g.recent += s.recent; g.skus++; });
   const models = [...map.values()].sort((a, b) => a.model.localeCompare(b.model));
   const seen = new Set();
   models.forEach(g => {
@@ -223,12 +225,13 @@ function compute() {
 const COLS = [
   {k: 'model', l: 'モデル', left: true}, {k: 'color', l: 'カラー', left: true}, {k: 'size_num', l: 'サイズ', left: true, r: s => esc(s.size)}, {k: 'gender', l: '性別', left: true},
   {k: 'stock', l: '在庫数', r: s => fmt(s.stock)},
+  {k: 'incoming', l: `入荷予定<br><span class="muted">${esc(SHIP_LABEL)}</span>`, r: s => s.incoming ? '+' + fmt(s.incoming) : ''},
   {k: 'avg', l: `今年の月平均<br><span class="muted">${+MONTHS[0].slice(5)}〜${+MONTHS[MONTHS.length - 1].slice(5)}月</span>`, r: s => fmt1(s.avg)},
   {k: 'recent', l: `直近3ヶ月の月平均<br><span class="muted">${+RECENT[0].slice(5)}〜${+RECENT[RECENT.length - 1].slice(5)}月</span>`, r: s => fmt1(s.recent)},
   {k: 'cover', l: '在庫月数', r: s => coverText(s)},
   {k: 'status', l: 'ステータス', left: true, r: s => badge(s.status)},
 ];
-const NUMERIC = new Set(['stock', 'avg', 'recent', 'cover']);
+const NUMERIC = new Set(['stock', 'incoming', 'avg', 'recent', 'cover']);
 function defaultSort(a, b) { return a.model.localeCompare(b.model) || a.color.localeCompare(b.color) || a.gender.localeCompare(b.gender) || (a.size_num - b.size_num); }
 function renderList(models) {
   const counts = {}; SK.forEach(s => counts[s.status] = (counts[s.status] || 0) + 1);
@@ -239,7 +242,8 @@ function renderList(models) {
   const rows = SK.filter(s => S.status.has(s.status) && (!S.model || s.model === S.model) && (!S.gender || s.gender === S.gender) && (!q || s.color.toLowerCase().includes(q)));
   if (S.sort) { const k = S.sort; rows.sort((a, b) => { const av = a[k], bv = b[k]; const c = NUMERIC.has(k) || k === 'size_num' ? (av === bv ? 0 : (av === Infinity ? 1 : bv === Infinity ? -1 : av - bv)) : String(av ?? '').localeCompare(String(bv ?? '')); return c * S.dir || defaultSort(a, b); }); }
   else rows.sort(defaultSort);
-  $('count').textContent = `${rows.length} / ${SK.length} SKU · 在庫 ${fmt(rows.reduce((a, s) => a + s.stock, 0))}足`;
+  const inc = rows.reduce((a, s) => a + s.incoming, 0);
+  $('count').textContent = `${rows.length} / ${SK.length} SKU · 在庫 ${fmt(rows.reduce((a, s) => a + s.stock, 0))}足${inc ? ` · 入荷予定 +${fmt(inc)}足` : ''}`;
   let prev = null;
   $('skuTable').innerHTML = `<table class="tbl"><thead><tr>${COLS.map(c => `<th class="${c.left ? 'l' : ''} ${S.sort === c.k ? 'sorted' : ''}" data-k="${c.k}">${c.l}${S.sort === c.k ? (S.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>${rows.map(s => { const start = !S.sort && s.item !== prev; prev = s.item; return `<tr class="${start ? 'item-start' : ''}">${COLS.map(c => `<td class="${c.left ? 'l' : 'num'}">${c.r ? c.r(s) : esc(s[c.k])}</td>`).join('')}</tr>`; }).join('')}</tbody></table>`;
   // click cycle: first direction (desc for numbers, asc for text) -> reverse -> back to alphabetical
@@ -247,18 +251,18 @@ function renderList(models) {
   $('skuTable').querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; if (S.sort === k) { if (S.dir === firstDir(k)) S.dir = -S.dir; else { S.sort = null; S.dir = 1; } } else { S.sort = k; S.dir = firstDir(k); } renderList(models); });
 }
 function exportCsv() {
-  const head = ['モデル', 'カラー', 'サイズ', '性別', '在庫数', '今年の月平均', '直近3ヶ月の月平均', '在庫月数', 'ステータス', '入荷予定', '2026年販売(実績)', '販売月数', '初入荷', ...MONTHS.map(m => m + ' 販売'), '2026年販売(在庫表)', '2025年販売(在庫表)'];
-  const rows = SK.slice().sort(defaultSort).map(s => [s.model, s.color, s.size, s.gender, s.stock, s.avg.toFixed(2), s.recent.toFixed(2), s.avg > 0 ? (s.cover >= 99 ? '99+' : s.cover.toFixed(1)) : (s.stock > 0 ? 'inf' : '0'), STATUS[s.status].label, s.on_order, s.sold2026, s.months, s.first_import || '', ...MONTHS.map(m => s.monthly[m] || 0), s.s2026, s.s2025]);
+  const head = ['モデル', 'カラー', 'サイズ', '性別', '在庫数', `入荷予定(${SHIP_LABEL})`, '今年の月平均', '直近3ヶ月の月平均', '在庫月数', 'ステータス', '2026年販売(実績)', '販売月数', '初入荷', ...MONTHS.map(m => m + ' 販売'), '2026年販売(在庫表)', '2025年販売(在庫表)', '発注残(在庫表 Order Import)'];
+  const rows = SK.slice().sort(defaultSort).map(s => [s.model, s.color, s.size, s.gender, s.stock, s.incoming, s.avg.toFixed(2), s.recent.toFixed(2), s.avg > 0 ? (s.cover >= 99 ? '99+' : s.cover.toFixed(1)) : (s.stock > 0 ? 'inf' : '0'), STATUS[s.status].label, s.sold2026, s.months, s.first_import || '', ...MONTHS.map(m => s.monthly[m] || 0), s.s2026, s.s2025, s.on_order]);
   const csv = '﻿' + [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'})); a.download = `vff_stock_${D.as_of}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // ---- 詳細 ----
 function renderDetail(models) {
-  const stock = SK.reduce((a, s) => a + s.stock, 0), avg = SK.reduce((a, s) => a + s.avg, 0), recent = SK.reduce((a, s) => a + s.recent, 0), onOrder = SK.reduce((a, s) => a + s.on_order, 0);
+  const stock = SK.reduce((a, s) => a + s.stock, 0), avg = SK.reduce((a, s) => a + s.avg, 0), recent = SK.reduce((a, s) => a + s.recent, 0), incoming = SK.reduce((a, s) => a + s.incoming, 0);
   const cnt = k => SK.filter(s => s.status === k).length;
   $('kpis').innerHTML = `
-    <div class="kpi"><div class="kpi-label">総在庫(${D.as_of})</div><div class="kpi-value">${fmt(stock)}<small>足</small></div><div class="kpi-sub">${SK.length} SKU · ${models.length} モデル · 入荷予定 +${fmt(onOrder)}</div></div>
+    <div class="kpi"><div class="kpi-label">総在庫(${D.as_of})</div><div class="kpi-value">${fmt(stock)}<small>足</small></div><div class="kpi-sub">${SK.length} SKU · ${models.length} モデル · 入荷予定 +${fmt(incoming)}${SHIP_LABEL ? `(${esc(SHIP_LABEL)})` : ''}</div></div>
     <div class="kpi"><div class="kpi-label">今年の月平均販売</div><div class="kpi-value">${fmt(avg)}<small>足/月</small></div><div class="kpi-sub">2026年1〜8月 計 ${fmt(SK.reduce((a, s) => a + s.sold2026, 0))}足(国内・SKU照合分)· 直近3ヶ月 ${fmt(recent)}足/月</div></div>
     <div class="kpi"><div class="kpi-label">在庫月数(全体)</div><div class="kpi-value">${fmt1(stock / avg)}<small>ヶ月</small></div><div class="kpi-sub">在庫 ÷ 今年の月平均</div></div>
     <div class="kpi out"><div class="kpi-label">欠品中</div><div class="kpi-value">${cnt('out')}<small>SKU</small></div><div class="kpi-sub">在庫0で今年販売あり</div></div>
@@ -270,13 +274,15 @@ function renderDetail(models) {
     ['今年の月平均', `SKU の 2026年${+MONTHS[0].slice(5)}〜${+MONTHS[MONTHS.length - 1].slice(5)}月の販売足数(販売実績の明細を SKU 単位で集計、輸出を除く)÷ 販売月数。初入荷(または初販売)が2026年ならその月〜${+MONTHS[MONTHS.length - 1].slice(5)}月、それ以前なら ${MONTHS.length}ヶ月`],
     ['直近3ヶ月の月平均', `SKU の ${RECENT.map(mLab).join('・')}の販売足数 ÷ 3(同じ明細から。輸出を除く)`],
     ['在庫月数', '在庫数 ÷ 今年の月平均'],
-    ['入荷予定', '在庫表の Order Import 列(発注済み・未入荷)。到着月は在庫表に無い'],
+    ['入荷予定', (D.shipments || []).length
+      ? `梱包明細の SKU 別足数。${D.shipments.map(sh => `PO# ${esc(sh.po)}(${sh.doc_date ? esc(sh.doc_date) + ' 付、' : ''}${sh.etd ? esc(sh.etd) + ' 出港、' : ''}${fmt(sh.cartons)}箱・${fmt(sh.pairs)}足)`).join('、')}。在庫表の Order Import 列(発注残)との差は ${D.incoming_vs_order.length ? `${D.incoming_vs_order.length} SKU` : 'なし'}${D.incoming_unmatched.length ? `。在庫表に無い SKU ${D.incoming_unmatched.length}行は未表示` : ''}。到着予定日は梱包明細に無い`
+      : '入荷予定の梱包明細は未登録'],
     ['ステータス', `欠品中 → 要発注(< ${S.lead}ヶ月)→ 適正 → 在庫過剰(> 12ヶ月)。販売0は 動きなし / 入荷待ち / 在庫なし`],
   ].map(([k, v]) => `<div><div class="k">${k}</div>${v}</div>`).join('');
 
   const maxStock = Math.max(...models.map(g => g.stock), 1);
-  const tot = {stock: 0, on_order: 0, s2026: 0, avg: 0, recent: 0, raw: MONTHS.map(() => 0), export: 0};
-  models.forEach(g => { tot.stock += g.stock; tot.on_order += g.on_order; tot.s2026 += g.s2026; tot.sold2026 = (tot.sold2026 || 0) + g.sold2026; tot.avg += g.avg; tot.recent += g.recent; if (g.primary) { g.raw.forEach((v, i) => tot.raw[i] += v); tot.export += g.export; } });
+  const tot = {stock: 0, incoming: 0, s2026: 0, avg: 0, recent: 0, raw: MONTHS.map(() => 0), export: 0};
+  models.forEach(g => { tot.stock += g.stock; tot.incoming += g.incoming; tot.s2026 += g.s2026; tot.sold2026 = (tot.sold2026 || 0) + g.sold2026; tot.avg += g.avg; tot.recent += g.recent; if (g.primary) { g.raw.forEach((v, i) => tot.raw[i] += v); tot.export += g.export; } });
   const recentIdx = RECENT.map(m => MONTHS.indexOf(m));
   const cell = (v, i) => `<td class="num ${recentIdx.includes(i) ? '' : 'dim'}">${fmt(v)}</td>`;
   $('modelTable').innerHTML = `<table class="tbl"><thead><tr>
@@ -284,11 +290,11 @@ function renderDetail(models) {
       ${MONTHS.map(m => `<th>${mLab(m)}</th>`).join('')}<th>2026年計<br><span class="muted">モデル全体</span></th><th>2026年販売<br><span class="muted">在庫表</span></th>
     </tr></thead><tbody>${models.map(g => `<tr>
       <td class="l"><span class="bar" style="width:${Math.max(2, g.stock / maxStock * 80)}px"></span>${esc(g.model)}</td>
-      <td class="num">${fmt(g.stock)}</td><td class="num dim">${g.on_order ? '+' + fmt(g.on_order) : ''}</td><td class="num">${fmt(g.sold2026)}</td><td class="num">${fmt1(g.avg)}</td><td class="num">${fmt1(g.recent)}</td><td class="num">${coverText(g)}</td><td class="l">${badge(g.status)}</td>
+      <td class="num">${fmt(g.stock)}</td><td class="num">${g.incoming ? '+' + fmt(g.incoming) : ''}</td><td class="num">${fmt(g.sold2026)}</td><td class="num">${fmt1(g.avg)}</td><td class="num">${fmt1(g.recent)}</td><td class="num">${coverText(g)}</td><td class="l">${badge(g.status)}</td>
       ${g.primary ? g.raw.map(cell).join('') + `<td class="num">${fmt(g.raw.reduce((a, b) => a + b, 0))}${g.export ? `<span class="muted"> (うち輸出 ${fmt(g.export)})</span>` : ''}</td>`
                   : `<td class="dim l" colspan="${MONTHS.length + 1}">${g.sales_model ? `${esc(g.sales_model.replace(/^VFF /, ''))} に含まれる` : '販売実績に該当なし'}</td>`}
       <td class="num dim">${fmt(g.s2026)}</td>
-    </tr>`).join('')}<tr class="total"><td class="l">合計</td><td class="num">${fmt(tot.stock)}</td><td class="num">+${fmt(tot.on_order)}</td><td class="num">${fmt(tot.sold2026)}</td><td class="num">${fmt1(tot.avg)}</td><td class="num">${fmt1(tot.recent)}</td><td class="num">${fmt1(tot.stock / tot.avg)}</td><td></td>${tot.raw.map(cell).join('')}<td class="num">${fmt(tot.raw.reduce((a, b) => a + b, 0))}</td><td class="num dim">${fmt(tot.s2026)}</td></tr></tbody></table>`;
+    </tr>`).join('')}<tr class="total"><td class="l">合計</td><td class="num">${fmt(tot.stock)}</td><td class="num">${tot.incoming ? '+' + fmt(tot.incoming) : ''}</td><td class="num">${fmt(tot.sold2026)}</td><td class="num">${fmt1(tot.avg)}</td><td class="num">${fmt1(tot.recent)}</td><td class="num">${fmt1(tot.stock / tot.avg)}</td><td></td>${tot.raw.map(cell).join('')}<td class="num">${fmt(tot.raw.reduce((a, b) => a + b, 0))}</td><td class="num dim">${fmt(tot.s2026)}</td></tr></tbody></table>`;
   $('modelNote').innerHTML = `月別の列はモデル全体(全カラー・全サイズ、旧カラー含む)の販売足数で、明るい列 = 直近3ヶ月。<b>${+D.export_month.slice(5)}月には一括輸出 ${fmt(D.export_total)}足</b>(${Object.entries(D.export_by_model).map(([m, q]) => `${esc(m.replace(/^VFF /, ''))} ${fmt(q)}`).join(' / ')})が含まれますが、SKU 別の数字(今年の月平均・直近3ヶ月)からは除いています。「2026年販売 在庫表」は在庫表の販売列(参考)。`;
 
   const rec = D.reconciliation;

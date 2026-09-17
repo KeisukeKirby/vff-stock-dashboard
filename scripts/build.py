@@ -55,7 +55,32 @@ skus = []
 for s in stock["skus"]:
     d = {k: s[k] for k in SKU_FIELDS}
     d["monthly"] = by_row.get(str(s["row"]), {})
+    d["incoming"] = 0
     skus.append(d)
+
+# ---- incoming shipments (packing lists, scripts/extract_incoming.py) matched to stock SKUs ----
+# Packing-list colour spellings differ only in punctuation ('Ivory-Deep Lake' vs 'Ivory Deep Lake'),
+# so model/colour are compared with non-alphanumerics stripped.
+norm = lambda t: "".join(ch for ch in str(t or "").lower() if ch.isalnum())
+incoming_path = p("data", "incoming.json")
+shipments = json.load(open(incoming_path, encoding="utf-8"))["shipments"] if os.path.exists(incoming_path) else []
+sku_by_key = {(norm(s["model"]), s["gender"], norm(s["color"]), s["size_num"]): s for s in skus}
+incoming_unmatched = []
+for sh in shipments:
+    sh["matched_pairs"] = 0
+    for l in sh["lines"]:
+        s = sku_by_key.get((norm(l["style"]), l["gender"], norm(l["color"]), l["size"]))
+        if s:
+            s["incoming"] += l["qty"]; sh["matched_pairs"] += l["qty"]
+        else:
+            incoming_unmatched.append(dict(po=sh["po"], **l))
+incoming_vs_order = [dict(model=s["model"], gender=s["gender"], color=s["color"], size=s["size"], incoming=s["incoming"], on_order=s["on_order"])
+                     for s in skus if s["incoming"] != s["on_order"]]
+for sh in shipments:
+    print(f"incoming PO {sh['po']} ETD {sh['etd']}: {sh['pairs']} prs, matched to stock SKUs {sh['matched_pairs']}")
+if incoming_unmatched:
+    print("WARNING incoming lines not in the stock sheet:", incoming_unmatched)
+print(f"SKUs where packing-list incoming != stock sheet Order Import: {len(incoming_vs_order)}", incoming_vs_order[:10])
 
 stocked = {s["sales_model"].upper() for s in stock["skus"] if s["sales_model"]}
 unmatched_stocked = [u for u in sku_sales["unmatched"] if u["model"].upper() in stocked]
@@ -72,6 +97,9 @@ data = dict(
     reconciliation=recon,
     unmatched_stocked=unmatched_stocked, unmatched_stocked_qty=round(sum(u["qty"] for u in unmatched_stocked)),
     unmatched_other_qty=round(sku_sales["unmatched_qty"] - sum(u["qty"] for u in unmatched_stocked)),
+    # invoice/container numbers stay out of the public page; PO, dates and totals identify the shipment
+    shipments=[{k: sh.get(k) for k in ("po", "doc_date", "etd", "cartons", "pairs", "matched_pairs")} for sh in shipments],
+    incoming_unmatched=incoming_unmatched, incoming_vs_order=incoming_vs_order,
 )
 blob = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 html = template.replace("/*__DATA__*/null", blob)

@@ -7,7 +7,7 @@ Vibram FiveFingers(VFF)シューズの月末在庫表を **SKU(モデル × 性�
 
 ## 画面
 
-- **在庫一覧タブ** — SKU(モデル × カラー × サイズ × 性別)をアルファベット順に一覧。列は 在庫数 / 今年の月平均 / 直近3ヶ月の月平均(推定) / 在庫月数 / ステータス のみ。ステータス・モデル・性別・カラー検索で絞り込み、列見出しで並び替え、CSV書き出し
+- **在庫一覧タブ** — SKU(モデル × カラー × サイズ × 性別)をアルファベット順に一覧。列は 在庫数 / 入荷予定 / 今年の月平均 / 直近3ヶ月の月平均 / 在庫月数 / ステータス のみ。ステータス・モデル・性別・カラー検索で絞り込み、列見出しで並び替え、CSV書き出し
 - **詳細タブ** — KPI(総在庫、月平均販売、在庫月数、欠品中 / 要発注 / 在庫過剰の SKU 数)、リードタイム設定とステータス定義、モデル別サマリー(月別実績・2026年計)、データの注記
 
 ## 計算(意図的に単純)
@@ -16,6 +16,7 @@ Vibram FiveFingers(VFF)シューズの月末在庫表を **SKU(モデル × 性�
 |---|---|
 | 今年の月平均 | SKU の 2026年1〜8月販売足数(明細ベース、輸出を除く)÷ 販売月数(初入荷または初販売が2026年ならその月〜8月、それ以前なら 8) |
 | 直近3ヶ月の月平均 | SKU の 6〜8月販売足数 ÷ 3(同じ明細、輸出を除く) |
+| 入荷予定 | 仕入先の梱包明細(Packing List .xls)の SKU 別足数。複数便は合算。在庫月数・ステータスの計算には含めない |
 | 在庫月数 | 在庫 ÷ 今年の月平均 |
 | 欠品中 | 在庫 0 かつ 今年の販売あり |
 | 要発注 | 在庫月数 < リードタイム(既定 3ヶ月、画面で 2〜4 を選択) |
@@ -33,6 +34,7 @@ Vibram FiveFingers(VFF)シューズの月末在庫表を **SKU(モデル × 性�
 | `index.html` | 完成ページ(生成物。データ埋め込み済みの単一ファイル) |
 | `src/template.html` | ページ本体のテンプレート。`/*__DATA__*/null` に build.py がデータを埋め込む |
 | `scripts/extract_stock.py` | 在庫表 xlsx → `data/stock.json`(標準ライブラリのみ) |
+| `scripts/extract_incoming.py` | 梱包明細 .xls → `data/incoming.json`(Excel 経由で読み取り専用に開く。箱・品番・全体の合計を検算し、合わなければ書き出さない。PO 単位で追加/置換、入荷後は `--remove <PO>`) |
 | `scripts/stage_raw_sales.py` | Downloads にある販売明細 Excel を、ETL が期待するファイル名で `data/raw/`(git 管理外)へ複製 |
 | `scripts/sales_etl/etl*.py` | 販売ダッシュボードの ETL の複製。`patch_sales_etl.py` で入出力パスを環境変数化(それ以外は同一)。7月単月ローダーは二重計上防止のため無効化 |
 | `scripts/sku_sales.py` | ETL の明細 → VFF シューズ SKU × 月 → 在庫表の SKU に照合 → `data/sku_sales.json` |
@@ -45,6 +47,7 @@ Vibram FiveFingers(VFF)シューズの月末在庫表を **SKU(モデル × 性�
 
 ```bash
 python scripts/extract_stock.py "C:\path\to\VFF Stock 30-09-26.xlsx"
+python scripts/extract_incoming.py "C:\path\to\<Packing List>.xls"
 python scripts/stage_raw_sales.py
 set SALES_RAW_DIR=data\raw
 set SALES_OUT_DIR=data
